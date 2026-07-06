@@ -1,0 +1,11 @@
+{
+  "name": "gadgetchai-scripts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "seed": "node scripts/seed-database.mjs"
+  },
+  "optionalDependencies": {
+    "pg": "^8.13.1"
+  }
+}
