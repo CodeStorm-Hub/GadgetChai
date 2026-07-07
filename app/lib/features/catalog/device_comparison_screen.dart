@@ -18,6 +18,12 @@ class DeviceComparisonScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text('${s.compare} (${devices.length}/${CompareNotifier.maxDevices})'),
+        elevation: 0,
+        backgroundColor: context.colors.surface,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Divider(color: context.colors.outline, height: 1, thickness: 1.5),
+        ),
         actions: [
           if (devices.isNotEmpty)
             TextButton(
@@ -80,16 +86,16 @@ class _CompareCard extends ConsumerWidget {
           ),
           Text('${device['brand']} · ${device['category']}', style: context.text.bodySmall),
           const SizedBox(height: AppSpacing.md),
-          _row('1 mo', device['monthly_price_1m']),
-          _row('3 mo', device['monthly_price_3m']),
-          _row('6 mo', device['monthly_price_6m']),
-          _row('12 mo', device['monthly_price_12m']),
+          _row(context, '1 mo', device['monthly_price_1m']),
+          _row(context, '3 mo', device['monthly_price_3m']),
+          _row(context, '6 mo', device['monthly_price_6m']),
+          _row(context, '12 mo', device['monthly_price_12m']),
           if (device['specs_processor'] != null) ...[
             const Divider(),
-            _spec('Processor', device['specs_processor']),
-            _spec('Display', device['specs_display']),
-            _spec('Memory', device['specs_memory']),
-            _spec('Battery', device['specs_battery']),
+            _spec(context, 'Processor', device['specs_processor']),
+            _spec(context, 'Display', device['specs_display']),
+            _spec(context, 'Memory', device['specs_memory']),
+            _spec(context, 'Battery', device['specs_battery']),
           ],
           const SizedBox(height: AppSpacing.md),
           FilledButton(
@@ -101,24 +107,46 @@ class _CompareCard extends ConsumerWidget {
     );
   }
 
-  Widget _row(String label, dynamic price) {
+  Widget _row(BuildContext context, String label, dynamic price) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label),
-          Text('৳${(price as num?)?.toInt() ?? 0}/mo'),
+          Text(label, style: context.text.bodyMedium),
+          Text(
+            '৳${(price as num?)?.toInt() ?? 0}/mo',
+            style: context.monoStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: context.colors.primary,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _spec(String label, dynamic value) {
+  Widget _spec(BuildContext context, String label, dynamic value) {
     if (value == null || '$value'.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Text('$label: $value'),
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: RichText(
+        text: TextSpan(
+          style: context.text.bodyMedium,
+          children: [
+            TextSpan(
+              text: '${label.toUpperCase()}: ',
+              style: context.monoStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: context.colors.onSurfaceVariant,
+              ),
+            ),
+            TextSpan(text: '$value', style: context.text.bodyMedium?.copyWith(color: context.colors.onSurface)),
+          ],
+        ),
+      ),
     );
   }
 }

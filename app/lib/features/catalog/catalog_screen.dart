@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:m3e_collection/m3e_collection.dart';
 import '../../core/design/adaptive_layout.dart';
 import '../../core/design/app_breakpoints.dart';
 import '../../core/design/app_spacing.dart';
@@ -288,74 +287,90 @@ class _CatalogExpressiveAppBar extends ConsumerWidget implements PreferredSizeWi
   final VoidCallback onOpenFilters;
   final VoidCallback onClearFilters;
 
-  static const double _toolbarHeight = 136;
+  static const double _toolbarHeight = 152;
 
   @override
   Size get preferredSize => const Size.fromHeight(_toolbarHeight);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return AppBarM3E(
-      automaticallyImplyLeading: false,
-      toolbarHeight: _toolbarHeight,
-      shapeFamily: AppBarM3EShapeFamily.round,
-      backgroundColor: context.colors.surfaceContainerLow,
-      title: Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Explore',
-                        style: context.text.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-                      ),
-                      Text(
-                        '$deviceCount devices available',
-                        style: context.text.bodySmall?.copyWith(color: context.colors.onSurfaceVariant),
-                      ),
-                    ],
+    return Container(
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        border: Border(
+          bottom: BorderSide(color: context.colors.outline, width: 2.0),
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.pageHorizontal,
+            8,
+            AppSpacing.pageHorizontal,
+            12,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Explore',
+                          style: context.text.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        Text(
+                          '$deviceCount devices available',
+                          style: context.monoStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: context.colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: onOpenFilters,
-                  icon: Badge(
-                    isLabelVisible: activeFilterCount > 0,
-                    label: Text('$activeFilterCount'),
-                    child: const Icon(Icons.tune_rounded, size: 18),
+                  OutlinedButton.icon(
+                    onPressed: onOpenFilters,
+                    icon: Badge(
+                      isLabelVisible: activeFilterCount > 0,
+                      label: Text('$activeFilterCount'),
+                      child: const Icon(Icons.tune_rounded, size: 18),
+                    ),
+                    label: const Text('Filters'),
                   ),
-                  label: const Text('Filters'),
-                ),
-                if (activeFilterCount > 0) ...[
-                  const SizedBox(width: AppSpacing.sm),
-                  IconButton(
-                    tooltip: 'Clear filters',
-                    onPressed: onClearFilters,
-                    icon: const Icon(Icons.filter_alt_off_rounded),
-                  ),
+                  if (activeFilterCount > 0) ...[
+                    const SizedBox(width: AppSpacing.sm),
+                    IconButton(
+                      tooltip: 'Clear filters',
+                      onPressed: onClearFilters,
+                      icon: const Icon(Icons.filter_alt_off_rounded),
+                    ),
+                  ],
                 ],
-              ],
-            ),
-            const SizedBox(height: AppSpacing.md),
-            SearchBar(
-              hintText: 'Search brand, model, category…',
-              leading: const Icon(Icons.search_rounded),
-              onChanged: (val) => ref.read(searchQueryProvider.notifier).state = val,
-              trailing: searchQuery.isNotEmpty
-                  ? [
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded),
-                        onPressed: () => ref.read(searchQueryProvider.notifier).state = '',
-                      ),
-                    ]
-                  : null,
-            ),
-          ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              SearchBar(
+                hintText: 'Search brand, model, category…',
+                leading: const Icon(Icons.search_rounded),
+                elevation: const WidgetStatePropertyAll(0),
+                onChanged: (val) => ref.read(searchQueryProvider.notifier).state = val,
+                trailing: searchQuery.isNotEmpty
+                    ? [
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () => ref.read(searchQueryProvider.notifier).state = '',
+                        ),
+                      ]
+                    : null,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -412,6 +427,7 @@ class _FiltersPanel extends ConsumerWidget {
             child: SearchBar(
               hintText: 'Search brand, model, category…',
               leading: const Icon(Icons.search_rounded),
+              elevation: const WidgetStatePropertyAll(0),
               onChanged: (val) => ref.read(searchQueryProvider.notifier).state = val,
               trailing: searchQuery.isNotEmpty
                   ? [
@@ -431,6 +447,7 @@ class _FiltersPanel extends ConsumerWidget {
             SearchBar(
               hintText: 'Search…',
               leading: const Icon(Icons.search_rounded),
+              elevation: const WidgetStatePropertyAll(0),
               onChanged: (val) => ref.read(searchQueryProvider.notifier).state = val,
               trailing: searchQuery.isNotEmpty
                   ? [
@@ -456,14 +473,15 @@ class _FiltersPanel extends ConsumerWidget {
         const SizedBox(height: AppSpacing.lg),
         Padding(
           padding: EdgeInsets.symmetric(horizontal: showHeader ? AppSpacing.pageHorizontal : 0),
-          child: GcExpressiveSurface(
+          child: GcCard(
+            color: context.colors.surface,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Category', style: context.text.titleMedium),
+                    Text('Category', style: context.text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                     DropdownButton<String>(
                       value: selectedCategory,
                       underline: const SizedBox(),
@@ -482,17 +500,23 @@ class _FiltersPanel extends ConsumerWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Monthly budget', style: context.text.titleMedium),
+                    Text('Monthly budget', style: context.text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                     Text(
                       '৳${budgetLimit.toInt()}/mo',
-                      style: context.text.titleMedium?.copyWith(color: context.colors.primary),
+                      style: context.monoStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: context.colors.primary,
+                      ),
                     ),
                   ],
                 ),
-                SliderM3E(
+                Slider(
                   value: budgetLimit,
                   min: 2000,
                   max: 15000,
+                  activeColor: context.colors.primary,
+                  inactiveColor: context.colors.surfaceContainerHigh,
                   divisions: 13,
                   label: '৳${budgetLimit.toInt()}/mo',
                   onChanged: (val) => ref.read(budgetLimitProvider.notifier).state = val,

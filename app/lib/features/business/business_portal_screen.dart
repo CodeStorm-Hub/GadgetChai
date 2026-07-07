@@ -104,7 +104,15 @@ class _BusinessPortalScreenState extends ConsumerState<BusinessPortalScreen> {
     final s = ref.watch(stringsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: Text('${s.business} Fleet Portal')),
+      appBar: AppBar(
+        title: Text('${s.business} Fleet Portal'),
+        elevation: 0,
+        backgroundColor: context.colors.surface,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Divider(color: context.colors.outline, height: 1, thickness: 1.5),
+        ),
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.pageHorizontal),
         child: Center(
@@ -178,6 +186,10 @@ class _BusinessPortalScreenState extends ConsumerState<BusinessPortalScreen> {
                           return FilterChip(
                             label: Text(type),
                             selected: selected,
+                            side: BorderSide(
+                              color: selected ? context.colors.primary : context.colors.outline,
+                              width: 1.5,
+                            ),
                             onSelected: (val) {
                               setState(() {
                                 if (val) {

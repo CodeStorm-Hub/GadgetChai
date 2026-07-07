@@ -607,29 +607,35 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         const SizedBox(height: AppSpacing.xl),
         Text('Billing breakdown', style: context.text.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: AppSpacing.md),
-        GcCard(
-          color: context.colors.surfaceContainerLow,
-          child: Column(
-            children: [
-              _buildSummaryRow('1st month rent', '৳${monthlyPrice.toInt()}'),
-              if (deliveryFee > 0) ...[
+        ClipPath(
+          clipper: const ReceiptCutClipper(),
+          child: TactileContainer(
+            backgroundColor: context.colors.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            borderWidth: 2.0,
+            padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.xl + 4),
+            child: Column(
+              children: [
+                _buildSummaryRow('1st month rent', '৳${monthlyPrice.toInt()}'),
+                if (deliveryFee > 0) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  _buildSummaryRow('Delivery (one-time)', '৳${deliveryFee.toInt()}'),
+                ],
                 const SizedBox(height: AppSpacing.sm),
-                _buildSummaryRow('Delivery (one-time)', '৳${deliveryFee.toInt()}'),
+                _buildSummaryRow(
+                  'Security deposit',
+                  _securityDeposit == 0 ? '৳0 (waived)' : '৳${_securityDeposit.toInt()}',
+                  valueColor: _securityDeposit == 0 ? context.colors.secondary : AppColors.warning,
+                ),
+                const Divider(height: AppSpacing.xl),
+                _buildSummaryRow(
+                  'Initial bKash charge',
+                  '৳${totalInitialCharge.toInt()}',
+                  valueColor: context.colors.primary,
+                  bold: true,
+                ),
               ],
-              const SizedBox(height: AppSpacing.sm),
-              _buildSummaryRow(
-                'Security deposit',
-                _securityDeposit == 0 ? '৳0 (waived)' : '৳${_securityDeposit.toInt()}',
-                valueColor: _securityDeposit == 0 ? context.colors.secondary : AppColors.warning,
-              ),
-              const Divider(height: AppSpacing.xl),
-              _buildSummaryRow(
-                'Initial bKash charge',
-                '৳${totalInitialCharge.toInt()}',
-                valueColor: context.colors.primary,
-                bold: true,
-              ),
-            ],
+            ),
           ),
         ),
         if (_securityDeposit > 0) ...[
@@ -733,8 +739,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           Text(label, style: context.text.bodyMedium),
           Text(
             value,
-            style: context.text.titleSmall?.copyWith(
-              fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+            style: context.monoStyle(
+              fontSize: 13,
+              fontWeight: bold ? FontWeight.bold : FontWeight.normal,
               color: valueColor,
             ),
           ),

@@ -202,7 +202,7 @@ ALTER TABLE public.b2b_inquiries ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS device_reviews_select_all ON public.device_reviews;
 CREATE POLICY device_reviews_select_all ON public.device_reviews
-  FOR SELECT TO authenticated USING (true);
+  FOR SELECT TO authenticated, anon USING (true);
 
 DROP POLICY IF EXISTS device_reviews_insert_own ON public.device_reviews;
 CREATE POLICY device_reviews_insert_own ON public.device_reviews
@@ -217,6 +217,7 @@ CREATE POLICY b2b_inquiries_select_own ON public.b2b_inquiries
   FOR SELECT TO authenticated
   USING (user_id = auth.uid() OR public.is_admin());
 
+GRANT SELECT ON public.device_reviews TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION public.submit_device_review(uuid, integer, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.apply_discount_program(text, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.device_rating_summary(uuid) TO authenticated, anon;

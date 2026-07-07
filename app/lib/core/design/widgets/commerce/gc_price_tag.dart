@@ -17,10 +17,10 @@ class GcPriceTag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = context.text;
     final scheme = context.colors;
-    final priceStyle = (compact ? textTheme.titleMedium : textTheme.titleLarge)?.copyWith(
-      fontWeight: emphasized ? FontWeight.w800 : FontWeight.w700,
+    final priceStyle = context.monoStyle(
+      fontSize: compact ? 16 : 20,
+      fontWeight: emphasized ? FontWeight.bold : FontWeight.w700,
       color: scheme.primary,
     );
     return RichText(
@@ -30,7 +30,8 @@ class GcPriceTag extends StatelessWidget {
           TextSpan(text: '৳${amount.toInt()}'),
           TextSpan(
             text: ' $suffix',
-            style: textTheme.bodyMedium?.copyWith(
+            style: context.monoStyle(
+              fontSize: compact ? 12 : 14,
               color: scheme.onSurfaceVariant,
               fontWeight: FontWeight.w500,
             ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../theme.dart';
 import '../../app_shapes.dart';
 import '../../app_spacing.dart';
+import 'tactile_container.dart';
 
 class GcCard extends StatelessWidget {
   const GcCard({
@@ -24,22 +25,14 @@ class GcCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = context.colors;
-    final content = Padding(
+    return TactileContainer(
+      margin: margin,
+      backgroundColor: color ?? scheme.surface,
+      borderRadius: expressive ? context.expressive.featureRadius : AppShapes.card,
       padding: padding ?? const EdgeInsets.all(AppSpacing.lg),
+      onTap: onTap,
+      borderWidth: expressive ? 2.5 : 2.0,
       child: child,
-    );
-
-    return Padding(
-      padding: margin ?? EdgeInsets.zero,
-      child: Material(
-        color: color ?? scheme.surfaceContainerLow,
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: expressive ? context.expressive.featureRadius : AppShapes.card,
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: onTap == null ? content : InkWell(onTap: onTap, child: content),
-      ),
     );
   }
 }
@@ -61,29 +54,25 @@ class GcQuickActionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = context.colors;
     return Expanded(
-      child: Material(
-        color: scheme.surfaceContainerHigh.withValues(alpha: 0.55),
+      child: TactileContainer(
+        backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(AppShapes.md),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md, horizontal: AppSpacing.sm),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 22, color: scheme.primary),
-                const SizedBox(height: 6),
-                Text(
-                  label,
-                  maxLines: 2,
-                  textAlign: TextAlign.center,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.text.labelMedium?.copyWith(fontWeight: FontWeight.w600),
-                ),
-              ],
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md, horizontal: AppSpacing.sm),
+        onTap: onTap,
+        borderWidth: 1.5,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 22, color: scheme.primary),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              maxLines: 2,
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
+              style: context.text.labelMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
-          ),
+          ],
         ),
       ),
     );

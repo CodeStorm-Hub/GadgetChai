@@ -292,12 +292,11 @@ class _CartTabState extends ConsumerState<CartTab> {
             ],
           ),
           const SizedBox(height: AppSpacing.lg),
-          Container(
+          TactileContainer(
+            backgroundColor: scheme.primaryContainer.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(AppShapes.sm),
+            borderWidth: 1.5,
             padding: const EdgeInsets.all(AppSpacing.md),
-            decoration: BoxDecoration(
-              color: scheme.primaryContainer.withValues(alpha: 0.35),
-              borderRadius: BorderRadius.circular(14),
-            ),
             child: Row(
               children: [
                 Icon(Icons.shield_rounded, color: scheme.primary, size: 22),
@@ -306,7 +305,7 @@ class _CartTabState extends ConsumerState<CartTab> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Care Plus', style: context.text.titleSmall),
+                      Text('Care Plus', style: context.text.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
                       Text(
                         'Screen & spill protection — ৳450/mo',
                         style: context.text.bodySmall,
@@ -340,22 +339,29 @@ class _CartTabState extends ConsumerState<CartTab> {
   Widget _buildBreakdownPanel(double monthlyRent, double carePlusRent, double delivery, double total) {
     if (!_isBreakdownExpanded) return const SizedBox.shrink();
 
-    return GcCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Charge breakdown', style: context.text.titleMedium),
-          const SizedBox(height: AppSpacing.lg),
-          _buildSummaryLine('Monthly rent', '৳${monthlyRent.toInt()}'),
-          if (carePlusRent > 0) ...[
+    return ClipPath(
+      clipper: const ReceiptCutClipper(),
+      child: TactileContainer(
+        backgroundColor: context.colors.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+        borderWidth: 2.0,
+        padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.xl + 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Charge breakdown', style: context.text.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+            const SizedBox(height: AppSpacing.lg),
+            _buildSummaryLine('Monthly rent', '৳${monthlyRent.toInt()}'),
+            if (carePlusRent > 0) ...[
+              const SizedBox(height: AppSpacing.sm),
+              _buildSummaryLine('Care Plus', '৳${carePlusRent.toInt()}', valueColor: context.colors.primary),
+            ],
             const SizedBox(height: AppSpacing.sm),
-            _buildSummaryLine('Care Plus', '৳${carePlusRent.toInt()}', valueColor: context.colors.primary),
+            _buildSummaryLine('Delivery (one-time)', '৳${delivery.toInt()}'),
+            const Divider(height: AppSpacing.xl),
+            _buildSummaryLine('First month total', '৳${total.toInt()}', bold: true, valueColor: context.colors.primary),
           ],
-          const SizedBox(height: AppSpacing.sm),
-          _buildSummaryLine('Delivery (one-time)', '৳${delivery.toInt()}'),
-          const Divider(height: AppSpacing.xl),
-          _buildSummaryLine('First month total', '৳${total.toInt()}', bold: true, valueColor: context.colors.primary),
-        ],
+        ),
       ),
     );
   }
@@ -367,8 +373,9 @@ class _CartTabState extends ConsumerState<CartTab> {
         Text(label, style: context.text.bodyMedium),
         Text(
           value,
-          style: context.text.titleMedium?.copyWith(
-            fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
+          style: context.monoStyle(
+            fontSize: 14,
+            fontWeight: bold ? FontWeight.bold : FontWeight.normal,
             color: valueColor,
           ),
         ),

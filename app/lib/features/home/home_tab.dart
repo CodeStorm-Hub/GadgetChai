@@ -229,18 +229,9 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   Widget _buildHero(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            context.colors.primary.withValues(alpha: 0.18),
-            context.colors.surfaceContainerLowest,
-            context.colors.secondary.withValues(alpha: 0.12),
-          ],
-        ),
-        borderRadius: BorderRadius.only(
-          bottomLeft: context.expressive.heroRadius.bottomLeft,
-          bottomRight: context.expressive.heroRadius.bottomRight,
+        color: context.colors.surface,
+        border: Border(
+          bottom: BorderSide(color: context.colors.outline, width: 2.0),
         ),
       ),
       child: SafeArea(
@@ -262,6 +253,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                     decoration: BoxDecoration(
                       color: context.colors.primaryContainer,
                       borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: context.colors.outline, width: 1.5),
                     ),
                     child: Icon(Icons.bolt_rounded, color: context.colors.primary, size: 20),
                   ),
@@ -275,7 +267,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
               const SizedBox(height: AppSpacing.lg),
               Text(
                 'Rent the tech you actually want',
-                style: context.text.headlineMedium?.copyWith(fontWeight: FontWeight.w800, height: 1.15),
+                style: context.text.displaySmall?.copyWith(fontWeight: FontWeight.w800, height: 1.15),
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
@@ -393,50 +385,48 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   Widget _buildCategoryTile(BuildContext context, Map<String, dynamic> cat) {
     final title = cat['title'] as String? ?? '';
 
-    return Material(
-      color: context.colors.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(AppShapes.lg),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => _openExplore(category: title),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Image.network(
-              cat['image_url'] as String? ?? '',
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => ColoredBox(color: context.colors.surfaceContainerHigh),
-            ),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    Colors.black.withValues(alpha: 0.7),
-                  ],
-                  stops: const [0.4, 1.0],
-                ),
+    return TactileContainer(
+      backgroundColor: context.colors.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(AppShapes.md),
+      padding: EdgeInsets.zero,
+      onTap: () => _openExplore(category: title),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.network(
+            cat['image_url'] as String? ?? '',
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => ColoredBox(color: context.colors.surfaceContainerHigh),
+          ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.transparent,
+                  Colors.black.withValues(alpha: 0.78),
+                ],
+                stops: const [0.4, 1.0],
               ),
             ),
-            Positioned(
-              left: 12,
-              right: 12,
-              bottom: 12,
-              child: Text(
-                title,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: context.text.titleSmall?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                ),
+          ),
+          Positioned(
+            left: 12,
+            right: 12,
+            bottom: 12,
+            child: Text(
+              title,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: context.text.titleSmall?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

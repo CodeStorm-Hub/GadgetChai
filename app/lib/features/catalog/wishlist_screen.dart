@@ -50,7 +50,15 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
     final user = Supabase.instance.client.auth.currentUser;
 
     return Scaffold(
-      appBar: AppBar(title: Text(s.wishlist)),
+      appBar: AppBar(
+        title: Text(s.wishlist),
+        elevation: 0,
+        backgroundColor: context.colors.surface,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Divider(color: context.colors.outline, height: 1, thickness: 1.5),
+        ),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : user == null
@@ -86,8 +94,15 @@ class _WishlistScreenState extends ConsumerState<WishlistScreen> {
                                 errorBuilder: (_, _, _) => const Icon(Icons.devices),
                               ),
                             ),
-                            title: Text(device['name'] as String? ?? ''),
-                            subtitle: Text('৳${(device['monthly_price_3m'] as num?)?.toInt() ?? 0}/mo'),
+                            title: Text(device['name'] as String? ?? '', style: context.text.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+                            subtitle: Text(
+                              '৳${(device['monthly_price_3m'] as num?)?.toInt() ?? 0}/mo',
+                              style: context.monoStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: context.colors.primary,
+                              ),
+                            ),
                             trailing: IconButton(
                               icon: Icon(Icons.favorite_rounded, color: context.colors.primary),
                               onPressed: () async {

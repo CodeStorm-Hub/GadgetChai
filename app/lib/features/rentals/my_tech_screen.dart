@@ -274,6 +274,12 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
                 Text('Your rentals & account', style: context.text.bodySmall),
               ],
             ),
+            elevation: 0,
+            backgroundColor: context.colors.surface,
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(1),
+              child: Divider(color: context.colors.outline, height: 1, thickness: 1.5),
+            ),
             actions: [
               if (isAdmin)
                 IconButton(
@@ -477,13 +483,24 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
                       style: context.text.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                     ),
                     const SizedBox(height: 4),
-                    Text('Phone: ${_profile?['phone'] ?? "Not set"}', style: context.text.bodyMedium),
+                    Text(
+                      'Phone: ${_profile?['phone'] ?? "Not set"}',
+                      style: context.monoStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
                         color: kycVerified ? scheme.secondaryContainer : AppColors.warningContainer,
                         borderRadius: BorderRadius.circular(99),
+                        border: Border.all(
+                          color: kycVerified ? scheme.secondary : AppColors.warning,
+                          width: 1,
+                        ),
                       ),
                       child: Text(
                         'IDENTITY ${_profile?['kyc_status']?.toUpperCase() ?? "NONE"}',
@@ -513,7 +530,13 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
                           strokeWidth: 6,
                         ),
                       ),
-                      Text('$score', style: context.text.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                      Text(
+                        '$score',
+                        style: context.monoStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -679,7 +702,11 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('Start', style: context.text.labelSmall),
-                    Text(DateFormat('dd MMM yyyy').format(startDate), style: context.text.bodySmall),
+                    const SizedBox(height: 2),
+                    Text(
+                      DateFormat('dd MMM yyyy').format(startDate),
+                      style: context.monoStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                    ),
                   ],
                 ),
                 if (nextBillDate != null)
@@ -687,11 +714,13 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Text('Next bill', style: context.text.labelSmall),
+                      const SizedBox(height: 2),
                       Text(
                         DateFormat('dd MMM yyyy').format(nextBillDate),
-                        style: context.text.bodySmall?.copyWith(
-                          color: scheme.secondary,
-                          fontWeight: FontWeight.w700,
+                        style: context.monoStyle(
+                          fontSize: 11,
+                          color: scheme.primary,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ],
@@ -700,7 +729,11 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text('Ends', style: context.text.labelSmall),
-                    Text(DateFormat('dd MMM yyyy').format(endDate), style: context.text.bodySmall),
+                    const SizedBox(height: 2),
+                    Text(
+                      DateFormat('dd MMM yyyy').format(endDate),
+                      style: context.monoStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                    ),
                   ],
                 ),
               ],
@@ -757,8 +790,40 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(s.sustainability, style: context.text.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-                Text('$s.co2Saved: ~${co2}kg', style: context.text.bodySmall),
-                Text('${s.devicesActive}: $devices', style: context.text.bodySmall),
+                const SizedBox(height: 4),
+                RichText(
+                  text: TextSpan(
+                    style: context.text.bodySmall?.copyWith(color: context.colors.onSurfaceVariant),
+                    children: [
+                      TextSpan(text: '${s.co2Saved}: '),
+                      TextSpan(
+                        text: '~${co2}kg',
+                        style: context.monoStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: context.colors.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 2),
+                RichText(
+                  text: TextSpan(
+                    style: context.text.bodySmall?.copyWith(color: context.colors.onSurfaceVariant),
+                    children: [
+                      TextSpan(text: '${s.devicesActive}: '),
+                      TextSpan(
+                        text: '$devices',
+                        style: context.monoStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: context.colors.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -928,15 +993,30 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('৳${amount.toInt()}', style: context.text.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                Text(
+                  '৳${amount.toInt()}',
+                  style: context.monoStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: isSuccess ? context.colors.primary : context.colors.error,
+                  ),
+                ),
+                const SizedBox(height: 2),
                 Text(
                   date != null ? DateFormat('dd MMM yyyy, HH:mm').format(date) : '—',
-                  style: context.text.bodySmall,
+                  style: context.monoStyle(fontSize: 11, color: context.colors.onSurfaceVariant),
                 ),
               ],
             ),
           ),
-          Text(status.toUpperCase(), style: context.text.labelSmall),
+          Text(
+            status.toUpperCase(),
+            style: context.monoStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: isSuccess ? context.colors.secondary : context.colors.error,
+            ),
+          ),
         ],
       ),
     );

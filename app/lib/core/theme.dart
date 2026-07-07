@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:m3e_collection/m3e_collection.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'design/app_shapes.dart';
 import 'design/app_spacing.dart';
 import 'design/expressive_theme.dart';
@@ -25,6 +26,19 @@ extension GadgetChaiTheme on BuildContext {
   bool get isDesktop => MediaQuery.sizeOf(this).width >= 840;
   GcExpressiveTheme get expressive =>
       Theme.of(this).extension<GcExpressiveTheme>() ?? GcExpressiveTheme.light;
+
+  /// Shorthand to get typewriter Space Mono text style.
+  TextStyle monoStyle({
+    double fontSize = 14,
+    FontWeight fontWeight = FontWeight.normal,
+    Color? color,
+  }) {
+    return GoogleFonts.spaceMono(
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      color: color ?? colors.onSurface,
+    );
+  }
 }
 
 class AppTheme {
@@ -53,8 +67,8 @@ class AppTheme {
       surface: AppColors.surface,
       onSurface: AppColors.onSurface,
       onSurfaceVariant: AppColors.onSurfaceVariant,
-      outline: AppColors.onSurfaceVariant.withValues(alpha: 0.35),
-      outlineVariant: AppColors.border,
+      outline: AppColors.borderStrong,
+      outlineVariant: AppColors.borderLight,
       surfaceContainerLowest: AppColors.surfaceContainerLowest,
       surfaceContainerLow: AppColors.surfaceContainerLow,
       surfaceContainer: AppColors.surfaceContainer,
@@ -161,21 +175,26 @@ class AppTheme {
       ),
 
       // Card Theme
-      cardTheme: const CardThemeData(
+      cardTheme: CardThemeData(
         elevation: 0,
+        color: colorScheme.surface,
         shadowColor: Colors.transparent,
         margin: EdgeInsets.zero,
         clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppShapes.card,
+          side: BorderSide(color: colorScheme.outline, width: 2.0),
+        ),
       ),
 
       // Chip Theme
       chipTheme: ChipThemeData(
         shape: AppShapes.chipShape,
-        side: BorderSide.none,
+        side: BorderSide(color: colorScheme.outline, width: 1.5),
         labelStyle: textTheme.labelMedium?.copyWith(
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
         ),
-        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         checkmarkColor: colorScheme.onPrimaryContainer,
         deleteIconColor: colorScheme.onSurfaceVariant,
         backgroundColor: colorScheme.surfaceContainerHighest,
@@ -190,23 +209,23 @@ class AppTheme {
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
           borderRadius: AppShapes.input,
-          borderSide: BorderSide(color: colorScheme.outlineVariant, width: 1),
+          borderSide: BorderSide(color: colorScheme.outline, width: 2.0),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: AppShapes.input,
-          borderSide: BorderSide(color: colorScheme.outlineVariant, width: 1),
+          borderSide: BorderSide(color: colorScheme.outline, width: 2.0),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: AppShapes.input,
-          borderSide: BorderSide(color: colorScheme.primary, width: 2),
+          borderSide: BorderSide(color: colorScheme.primary, width: 2.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: AppShapes.input,
-          borderSide: BorderSide(color: colorScheme.error, width: 2),
+          borderSide: BorderSide(color: colorScheme.error, width: 2.0),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: AppShapes.input,
-          borderSide: BorderSide(color: colorScheme.error, width: 2),
+          borderSide: BorderSide(color: colorScheme.error, width: 2.5),
         ),
         hintStyle: textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
         errorStyle: textTheme.bodySmall?.copyWith(color: colorScheme.error),
@@ -222,10 +241,13 @@ class AppTheme {
           foregroundColor: colorScheme.onPrimary,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: AppShapes.pill),
+          shape: RoundedRectangleBorder(
+            borderRadius: AppShapes.button,
+            side: BorderSide(color: colorScheme.outline, width: 2.0),
+          ),
           textStyle: textTheme.labelLarge?.copyWith(
             color: colorScheme.onPrimary,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
           ),
           minimumSize: const Size(48, 48),
         ),
@@ -237,25 +259,28 @@ class AppTheme {
           foregroundColor: colorScheme.onPrimary,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: AppShapes.button),
+          shape: RoundedRectangleBorder(
+            borderRadius: AppShapes.button,
+            side: BorderSide(color: colorScheme.outline, width: 2.0),
+          ),
           textStyle: textTheme.labelLarge?.copyWith(
             color: colorScheme.onPrimary,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
           ),
           minimumSize: Size(44, 44),
-          shadowColor: colorScheme.shadow,
+          shadowColor: Colors.transparent,
         ),
       ),
 
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: colorScheme.primary,
-          side: BorderSide(color: colorScheme.outline, width: 1.5),
+          foregroundColor: colorScheme.onSurface,
+          side: BorderSide(color: colorScheme.outline, width: 2.0),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(borderRadius: AppShapes.button),
           textStyle: textTheme.labelLarge?.copyWith(
-            color: colorScheme.primary,
-            fontWeight: FontWeight.w600,
+            color: colorScheme.onSurface,
+            fontWeight: FontWeight.w700,
           ),
           minimumSize: Size(44, 44),
         ),
@@ -406,16 +431,16 @@ class AppTheme {
       onError: const Color(0xFF690005),
       errorContainer: const Color(0xFF93000A),
       onErrorContainer: const Color(0xFFFFDAD6),
-      surface: const Color(0xFF1C1917),
-      onSurface: const Color(0xFFF5F5F4),
-      surfaceContainerHighest: const Color(0xFF44403C),
-      onSurfaceVariant: const Color(0xFFA8A29E),
-      outline: const Color(0xFF78716C),
-      outlineVariant: const Color(0xFF57534E),
+      surface: const Color(0xFF121417),
+      onSurface: const Color(0xFFF7F5F0),
+      surfaceContainerHighest: const Color(0xFF1C1E24),
+      onSurfaceVariant: const Color(0xFF8A8F9E),
+      outline: const Color(0xFFE5E2DA),
+      outlineVariant: const Color(0xFF535661),
       shadow: Colors.black.withValues(alpha: 0.4),
       scrim: Colors.black.withValues(alpha: 0.7),
-      inverseSurface: const Color(0xFFF5F5F4),
-      onInverseSurface: const Color(0xFF1C1917),
+      inverseSurface: const Color(0xFFF7F5F0),
+      onInverseSurface: const Color(0xFF1C1E24),
       inversePrimary: AppColors.primary,
       surfaceTint: AppColors.primary.withValues(alpha: 0.15),
     );
@@ -447,13 +472,13 @@ class AppTheme {
       elevatedButtonTheme: lightTheme.elevatedButtonTheme,
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: colorScheme.primary,
-          side: BorderSide(color: colorScheme.outline, width: 1.5),
+          foregroundColor: colorScheme.onSurface,
+          side: BorderSide(color: colorScheme.outline, width: 2.0),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(borderRadius: AppShapes.button),
           textStyle: textTheme.labelLarge?.copyWith(
-            color: colorScheme.primary,
-            fontWeight: FontWeight.w600,
+            color: colorScheme.onSurface,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ),

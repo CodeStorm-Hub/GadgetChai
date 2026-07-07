@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../theme.dart';
 import '../../app_shapes.dart';
 import '../../app_spacing.dart';
+import '../surfaces/tactile_container.dart';
 
 class GcSearchEntry extends StatelessWidget {
   const GcSearchEntry({
@@ -16,30 +17,24 @@ class GcSearchEntry extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = context.colors;
-    return Material(
-      color: scheme.surface,
-      elevation: 2,
-      shadowColor: scheme.primary.withValues(alpha: 0.12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppShapes.lg)),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppShapes.lg),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 16),
-          child: Row(
-            children: [
-              Icon(Icons.search_rounded, color: scheme.primary, size: 24),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Text(
-                  hintText,
-                  style: context.text.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
-                ),
-              ),
-              Icon(Icons.tune_rounded, size: 20, color: scheme.onSurfaceVariant),
-            ],
+    return TactileContainer(
+      backgroundColor: scheme.surface,
+      borderWidth: 2.0,
+      borderRadius: BorderRadius.circular(AppShapes.sm),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 14),
+      onTap: onTap,
+      child: Row(
+        children: [
+          Icon(Icons.search_rounded, color: scheme.primary, size: 24),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Text(
+              hintText,
+              style: context.text.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
+            ),
           ),
-        ),
+          Icon(Icons.tune_rounded, size: 20, color: scheme.onSurfaceVariant),
+        ],
       ),
     );
   }
@@ -67,7 +62,7 @@ class GcChipSelector extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (label != null) ...[
-          Text(label!, style: textTheme.titleMedium),
+          Text(label!, style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: AppSpacing.sm),
         ],
         SizedBox(
@@ -85,7 +80,10 @@ class GcChipSelector extends StatelessWidget {
                 showCheckmark: false,
                 selectedColor: scheme.primaryContainer,
                 backgroundColor: scheme.surfaceContainer,
-                side: BorderSide.none,
+                side: BorderSide(
+                  color: isSelected ? scheme.primary : scheme.outline,
+                  width: 1.5,
+                ),
                 onSelected: (_) => onSelected(option),
                 labelStyle: textTheme.labelLarge?.copyWith(
                   color: isSelected ? scheme.onPrimaryContainer : scheme.onSurface,

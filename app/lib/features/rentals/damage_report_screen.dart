@@ -112,7 +112,15 @@ class _DamageReportScreenState extends State<DamageReportScreen> {
 
     return Scaffold(
       backgroundColor: scheme.surfaceContainerLowest,
-      appBar: AppBar(title: const Text('Report damage')),
+      appBar: AppBar(
+        title: const Text('Report damage'),
+        elevation: 0,
+        backgroundColor: scheme.surface,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Divider(color: scheme.outline, height: 1, thickness: 1.5),
+        ),
+      ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.xl),
@@ -137,31 +145,28 @@ class _DamageReportScreenState extends State<DamageReportScreen> {
                     const SizedBox(height: 28),
                     GestureDetector(
                       onTap: _pickImage,
-                      child: Container(
-                        height: 180,
-                        decoration: BoxDecoration(
-                          color: scheme.surfaceContainerLow,
-                          borderRadius: BorderRadius.circular(AppShapes.lg),
-                          border: Border.all(
-                            color: _imagePath != null ? scheme.primary : scheme.outlineVariant,
-                            width: 2,
-                          ),
-                        ),
-                        child: _imagePath == null
-                            ? Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.add_photo_alternate, color: scheme.primary, size: 40),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    'Upload damage photo',
-                                    style: context.text.labelLarge?.copyWith(color: scheme.onSurfaceVariant),
-                                  ),
-                                ],
-                              )
-                            : ClipRRect(
-                                borderRadius: BorderRadius.circular(AppShapes.lg),
-                                child: Image.file(
+                      child: TactileContainer(
+                        backgroundColor: scheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(AppShapes.sm),
+                        borderWidth: 2.0,
+                        borderColor: _imagePath != null ? scheme.primary : scheme.outline,
+                        padding: EdgeInsets.zero,
+                        child: SizedBox(
+                          height: 180,
+                          width: double.infinity,
+                          child: _imagePath == null
+                              ? Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.add_photo_alternate, color: scheme.primary, size: 40),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      'Upload damage photo',
+                                      style: context.text.labelLarge?.copyWith(color: scheme.onSurfaceVariant),
+                                    ),
+                                  ],
+                                )
+                              : Image.file(
                                   File(_imagePath!),
                                   fit: BoxFit.cover,
                                   width: double.infinity,
@@ -179,7 +184,7 @@ class _DamageReportScreenState extends State<DamageReportScreen> {
                                     ),
                                   ),
                                 ),
-                              ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -202,8 +207,12 @@ class _DamageReportScreenState extends State<DamageReportScreen> {
                       onPressed: _isSubmitting ? null : _submitReport,
                       style: FilledButton.styleFrom(
                         backgroundColor: scheme.error,
+                        foregroundColor: scheme.onError,
                         minimumSize: const Size(double.infinity, 52),
-                        shape: RoundedRectangleBorder(borderRadius: AppShapes.pill),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: AppShapes.button,
+                          side: BorderSide(color: scheme.outline, width: 2.0),
+                        ),
                       ),
                       child: _isSubmitting
                           ? const SizedBox(

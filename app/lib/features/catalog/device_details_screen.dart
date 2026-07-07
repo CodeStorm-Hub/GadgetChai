@@ -53,8 +53,21 @@ class _DeviceDetailsScreenState extends ConsumerState<DeviceDetailsScreen> {
 
     try {
       final device = await _deviceRepository.fetchById(widget.deviceId);
-      final rating = await _reviewRepository.fetchDeviceRating(widget.deviceId);
-      final reviews = await _reviewRepository.fetchDeviceReviews(widget.deviceId);
+
+      Map<String, dynamic> rating = {'avg_rating': 0.0, 'review_count': 0};
+      try {
+        rating = await _reviewRepository.fetchDeviceRating(widget.deviceId);
+      } catch (e) {
+        debugPrint('Failed to load device rating summary: $e');
+      }
+
+      List<Map<String, dynamic>> reviews = [];
+      try {
+        reviews = await _reviewRepository.fetchDeviceReviews(widget.deviceId);
+      } catch (e) {
+        debugPrint('Failed to load device reviews: $e');
+      }
+
       var wishlisted = false;
       final user = Supabase.instance.client.auth.currentUser;
       if (user != null) {
@@ -478,7 +491,23 @@ class _DeviceDetailsScreenState extends ConsumerState<DeviceDetailsScreen> {
           const SizedBox(height: 16),
           _buildSpecLine('Memory', _device!['specs_memory'] ?? '12GB RAM'),
           Divider(color: scheme.outlineVariant, height: 20),
-          _buildSpecLine('Battery', _device!['specs_battery'] ?? '3988 mAh'),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: _buildSpecLine('Battery', _device!['specs_battery'] ?? '3988 mAh'),
+              ),
+              const Padding(
+                padding: EdgeInsets.only(left: 16),
+                child: EcoDial(
+                  value: 0.88,
+                  label: 'Battery Health',
+                  size: 76,
+                ),
+              ),
+            ],
+          ),
           Divider(color: scheme.outlineVariant, height: 20),
           _buildSpecLine('Display', _device!['specs_display'] ?? '6.3-inch OLED Retina screen'),
           if (_showAllSpecs) ...[
@@ -491,9 +520,6 @@ class _DeviceDetailsScreenState extends ConsumerState<DeviceDetailsScreen> {
           Center(
             child: OutlinedButton(
               onPressed: () => setState(() => _showAllSpecs = !_showAllSpecs),
-              style: OutlinedButton.styleFrom(
-                shape: RoundedRectangleBorder(borderRadius: AppShapes.pill),
-              ),
               child: Text(_showAllSpecs ? 'Show less' : 'Show more'),
             ),
           ),
@@ -506,11 +532,21 @@ class _DeviceDetailsScreenState extends ConsumerState<DeviceDetailsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: context.text.labelMedium),
+        Text(
+          label.toUpperCase(),
+          style: context.monoStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: context.colors.onSurfaceVariant,
+          ),
+        ),
         const SizedBox(height: 4),
         Text(
           value,
-          style: context.text.bodyMedium?.copyWith(fontWeight: FontWeight.w700, color: context.colors.onSurface),
+          style: context.text.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: context.colors.onSurface,
+          ),
         ),
       ],
     );

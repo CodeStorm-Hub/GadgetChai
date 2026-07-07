@@ -496,27 +496,23 @@ serve(async (req) => {
 
       const agreementID = (execData.agreementID ?? execData.agreementId) as string;
 
-      await supabase
-
-        .from("rentals")
-
-        .update({ bkash_agreement_id: agreementID })
-
-        .eq("id", rental_id);
-
-
-
       const { data: rental } = await supabase
-
         .from("rentals")
-
         .select("*, profiles(phone)")
-
         .eq("id", rental_id)
-
         .single();
 
-
+      if (rental?.checkout_group_id) {
+        await supabase
+          .from("rentals")
+          .update({ bkash_agreement_id: agreementID })
+          .eq("checkout_group_id", rental.checkout_group_id);
+      } else {
+        await supabase
+          .from("rentals")
+          .update({ bkash_agreement_id: agreementID })
+          .eq("id", rental_id);
+      }
 
       const payerPhone =
 
