@@ -9,6 +9,7 @@ import '../../core/theme_mode_provider.dart';
 import '../../core/widgets/gc_components.dart';
 import '../../core/supabase/profile_repository.dart';
 import '../../core/supabase/rental_repository.dart';
+import '../../core/supabase/transaction_repository.dart';
 
 class MyTechScreen extends ConsumerStatefulWidget {
   const MyTechScreen({super.key});
@@ -20,19 +21,30 @@ class MyTechScreen extends ConsumerStatefulWidget {
 class _MyTechScreenState extends ConsumerState<MyTechScreen> {
   final _profileRepository = ProfileRepository();
   final _rentalRepository = RentalRepository();
+  final _transactionRepository = TransactionRepository();
 
   List<Map<String, dynamic>> _rentals = [];
+  List<Map<String, dynamic>> _transactions = [];
   Map<String, dynamic>? _profile;
   bool _isLoading = true;
   String? _errorMessage;
 
   final _addressController = TextEditingController(text: "12/A, Dhanmondi, Dhaka");
   final _contactController = TextEditingController(text: "+8801912345678 (Brother)");
+  final _phoneController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _fetchUserData();
+  }
+
+  @override
+  void dispose() {
+    _addressController.dispose();
+    _contactController.dispose();
+    _phoneController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchUserData() async {
@@ -54,18 +66,40 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
 
       final profile = await _profileRepository.fetchProfile(user.id);
       final rentals = await _rentalRepository.fetchUserRentals(user.id);
+      final transactions = await _transactionRepository.fetchForUser(user.id);
 
       setState(() {
         _profile = profile;
         _rentals = rentals;
+        _transactions = transactions;
         _isLoading = false;
         _errorMessage = null;
+        _phoneController.text = profile?['phone'] as String? ?? '';
       });
     } catch (e) {
       setState(() {
         _errorMessage = 'Failed to load account data: $e';
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _saveBkashPhone() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    final phone = _phoneController.text.trim();
+    if (!isValidBdPhone(phone)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid bKash number (01XXXXXXXXX).')),
+      );
+      return;
+    }
+    await _profileRepository.updatePhone(user.id, normalizeBdPhone(phone));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('bKash wallet number saved.')),
+      );
+      await _fetchUserData();
     }
   }
 
@@ -184,6 +218,17 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
                   )
                 else
                   ..._rentals.map((rental) => _buildRentalCard(rental, textTheme)),
+                const SizedBox(height: AppSpacing.xl),
+                Text('Payment history', style: context.text.displaySmall),
+                const SizedBox(height: AppSpacing.lg),
+                if (_transactions.isEmpty)
+                  GcEmptyState(
+                    icon: Icons.receipt_long_rounded,
+                    title: 'No payments yet',
+                    message: 'bKash charges will appear here after your first payment.',
+                  )
+                else
+                  ..._transactions.take(10).map(_buildTransactionTile),
                 const SizedBox(height: AppSpacing.xxxl),
                 SizedBox(height: gcBottomNavScrollPadding(context)),
               ]),
@@ -321,7 +366,7 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
                       style: context.text.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                     ),
                     const SizedBox(height: 4),
-                    Text('Phone: ${_profile?['phone'] ?? ""}', style: context.text.bodyMedium),
+                    Text('Phone: ${_profile?['phone'] ?? "Not set"}', style: context.text.bodyMedium),
                     const SizedBox(height: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -365,6 +410,28 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
             ],
           ),
           Divider(color: scheme.outlineVariant, height: 32),
+          Text('bKash wallet', style: context.text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Wallet number',
+                    hintText: '01770618575',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton(
+                onPressed: _saveBkashPhone,
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
           Text('Fulfillment details', style: context.text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
           Row(
@@ -418,14 +485,25 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
 
   Widget _buildRentalCard(Map<String, dynamic> rental, TextTheme textTheme) {
     final device = rental['devices'];
-    final startDate = DateTime.parse(rental['start_date']);
-    final nextBillDate = DateTime.parse(rental['next_billing_date']);
-    final endDate = DateTime.parse(rental['end_date']);
+    final startRaw = rental['start_date'] as String?;
+    final nextBillRaw = rental['next_billing_date'] as String?;
+    final endRaw = rental['end_date'] as String?;
     final scheme = context.colors;
 
-    final totalDays = endDate.difference(startDate).inDays;
-    final elapsedDays = DateTime.now().difference(startDate).inDays;
-    final progress = (elapsedDays / totalDays).clamp(0.0, 1.0);
+    final startDate = startRaw != null ? DateTime.tryParse(startRaw) : null;
+    final nextBillDate = nextBillRaw != null ? DateTime.tryParse(nextBillRaw) : null;
+    final endDate = endRaw != null ? DateTime.tryParse(endRaw) : null;
+
+    double progress = 0;
+    if (startDate != null && endDate != null) {
+      final totalDays = endDate.difference(startDate).inDays;
+      if (totalDays > 0) {
+        final elapsedDays = DateTime.now().difference(startDate).inDays;
+        progress = (elapsedDays / totalDays).clamp(0.0, 1.0);
+      }
+    }
+
+    final status = rental['status'] as String? ?? 'pending_kyc';
 
     return GcCard(
       margin: const EdgeInsets.only(bottom: 20),
@@ -452,7 +530,8 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
                   children: [
                     Text(device['name'], style: context.text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 4),
-                    Text('${rental['plan_months']}-month rental plan', style: context.text.bodyMedium),
+                    Text('${rental['plan_months']}-month rental · ${status.replaceAll('_', ' ')}',
+                        style: context.text.bodyMedium),
                     const SizedBox(height: 6),
                     GcPriceTag(amount: rental['monthly_price'] as num, compact: true, emphasized: true),
                   ],
@@ -460,48 +539,54 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
               ),
             ],
           ),
-          Divider(color: scheme.outlineVariant, height: 28),
-          Text('Subscription timeline', style: context.text.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(99),
-            child: LinearProgressIndicator(
-              value: progress,
-              backgroundColor: scheme.surfaceContainerHigh,
-              color: scheme.primary,
-              minHeight: 6,
+          if (startDate != null && endDate != null) ...[
+            Divider(color: scheme.outlineVariant, height: 28),
+            Text('Subscription timeline', style: context.text.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: LinearProgressIndicator(
+                value: progress,
+                backgroundColor: scheme.surfaceContainerHigh,
+                color: scheme.primary,
+                minHeight: 6,
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Start', style: context.text.labelSmall),
-                  Text(DateFormat('dd MMM yyyy').format(startDate), style: context.text.bodySmall),
-                ],
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text('Next bill', style: context.text.labelSmall),
-                  Text(
-                    DateFormat('dd MMM yyyy').format(nextBillDate),
-                    style: context.text.bodySmall?.copyWith(color: scheme.secondary, fontWeight: FontWeight.w700),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Start', style: context.text.labelSmall),
+                    Text(DateFormat('dd MMM yyyy').format(startDate), style: context.text.bodySmall),
+                  ],
+                ),
+                if (nextBillDate != null)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text('Next bill', style: context.text.labelSmall),
+                      Text(
+                        DateFormat('dd MMM yyyy').format(nextBillDate),
+                        style: context.text.bodySmall?.copyWith(
+                          color: scheme.secondary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text('Ends', style: context.text.labelSmall),
-                  Text(DateFormat('dd MMM yyyy').format(endDate), style: context.text.bodySmall),
-                ],
-              ),
-            ],
-          ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('Ends', style: context.text.labelSmall),
+                    Text(DateFormat('dd MMM yyyy').format(endDate), style: context.text.bodySmall),
+                  ],
+                ),
+              ],
+            ),
+          ],
           Divider(color: scheme.outlineVariant, height: 28),
           Wrap(
             alignment: WrapAlignment.end,
@@ -521,6 +606,40 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTransactionTile(Map<String, dynamic> tx) {
+    final amount = (tx['amount'] as num?)?.toDouble() ?? 0;
+    final status = tx['status'] as String? ?? 'unknown';
+    final created = tx['created_at'] as String?;
+    final date = created != null ? DateTime.tryParse(created) : null;
+    final isSuccess = status == 'success';
+
+    return GcCard(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Icon(
+            isSuccess ? Icons.check_circle_outline : Icons.error_outline,
+            color: isSuccess ? context.colors.secondary : context.colors.error,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('৳${amount.toInt()}', style: context.text.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                Text(
+                  date != null ? DateFormat('dd MMM yyyy, HH:mm').format(date) : '—',
+                  style: context.text.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          Text(status.toUpperCase(), style: context.text.labelSmall),
         ],
       ),
     );

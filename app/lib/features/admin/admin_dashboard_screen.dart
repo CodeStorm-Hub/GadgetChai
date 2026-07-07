@@ -70,7 +70,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> wit
         _mrr = mrr;
         _utilization = utilization;
         _activeDefaults = fulfillmentOrders
-            .where((r) => r['status'] == 'active' && (r['security_deposit'] as num? ?? 0) > 0)
+            .where((r) => r['status'] == 'defaulted')
             .length;
         _isLoading = false;
       });

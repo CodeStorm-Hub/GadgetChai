@@ -3,7 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "seed": "node scripts/seed-database.mjs"
+    "seed": "node scripts/seed-database.mjs",
+    "charge-rentals": "node scripts/invoke-charge-rentals.mjs",
+    "wire-production": "node scripts/wire-production.mjs",
+    "sync-ngrok": "node scripts/sync-ngrok-url.mjs",
+    "health-check": "node scripts/health-check.mjs"
   },
   "optionalDependencies": {
     "pg": "^8.13.1"

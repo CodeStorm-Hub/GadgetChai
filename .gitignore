@@ -117,3 +117,29 @@ app.*.symbols
 !**/ios/**/default.perspectivev3
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
 !/dev/ci/**/Gemfile.lock
+
+# Node (root scripts)
+node_modules/
+
+# Local secrets (never commit)
+.env
+.env.local
+app/.env
+.edge-deploy-payload.json
+
+# Cursor / agent artifacts
+.cursor/
+.remember/
+
+# Design mockups (not used by the app)
+mock_ui/
+
+# Supabase CLI temp
+supabase/.temp/
+
+# Session exports
+session-export-*
+
+# KYC ML worker (Python 3.11 venv)
+kyc_service/.venv/
+/node_modules

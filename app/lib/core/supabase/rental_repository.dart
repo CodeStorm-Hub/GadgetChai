@@ -22,6 +22,8 @@ class RentalRepository {
     required double monthlyPrice,
     required double securityDeposit,
   }) async {
+    final endDate = DateTime.now().add(Duration(days: planMonths * 30));
+
     return await _client
         .from('rentals')
         .insert({
@@ -31,6 +33,7 @@ class RentalRepository {
           'monthly_price': monthlyPrice,
           'security_deposit': securityDeposit,
           'status': 'pending_kyc',
+          'end_date': endDate.toIso8601String(),
         })
         .select()
         .single();

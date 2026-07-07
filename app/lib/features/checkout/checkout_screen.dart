@@ -11,6 +11,7 @@ import '../../core/design/app_spacing.dart';
 import '../../core/theme.dart';
 import '../../core/widgets/gc_components.dart';
 import '../../core/supabase/device_repository.dart';
+import '../../core/supabase/profile_repository.dart';
 import '../../core/supabase/rental_repository.dart';
 import 'cart_provider.dart';
 
@@ -31,6 +32,8 @@ class CheckoutScreen extends ConsumerStatefulWidget {
 class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final _deviceRepository = DeviceRepository();
   final _rentalRepository = RentalRepository();
+  final _profileRepository = ProfileRepository();
+  final _bkashPhoneController = TextEditingController();
 
   static const _stepLabels = ['Documents', 'Selfie', 'Verify', 'Payment'];
 
@@ -55,6 +58,25 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   void initState() {
     super.initState();
     _fetchDeviceDetails();
+    _loadBkashPhone();
+  }
+
+  @override
+  void dispose() {
+    _bkashPhoneController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadBkashPhone() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    final profile = await _profileRepository.fetchProfile(user.id);
+    final phone = profile?['phone'] as String?;
+    if (phone != null && phone.isNotEmpty && mounted) {
+      _bkashPhoneController.text = phone;
+    } else if (mounted) {
+      _bkashPhoneController.text = AppConfig.bkashSandboxWallet;
+    }
   }
 
   Future<void> _fetchDeviceDetails() async {
@@ -93,12 +115,22 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       _currentStep = 2;
     });
 
-    final userId = Supabase.instance.client.auth.currentUser!.id;
+    final session = Supabase.instance.client.auth.currentSession;
+    final userId = session?.user.id;
+    if (userId == null || session == null) {
+      setState(() {
+        _errorMessage = 'You must be logged in to verify KYC.';
+        _isVerifying = false;
+        _currentStep = 1;
+      });
+      return;
+    }
 
     try {
       final uri = Uri.parse(AppConfig.verifyKycUrl);
       final request = http.MultipartRequest('POST', uri);
 
+      request.headers['Authorization'] = 'Bearer ${session.accessToken}';
       request.fields['user_id'] = userId;
       request.files.add(await http.MultipartFile.fromPath('nid_front', _nidFrontPath!));
       request.files.add(await http.MultipartFile.fromPath('nid_back', _nidBackPath!));
@@ -150,6 +182,27 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   }
 
   Future<void> _proceedToBkash() async {
+    if (_kycStatus == 'rejected') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('KYC was rejected. Please re-verify before paying.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    final phoneInput = _bkashPhoneController.text.trim();
+    if (!isValidBdPhone(phoneInput)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter a valid Bangladesh bKash wallet number (01XXXXXXXXX).'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isVerifying = true);
 
     final user = Supabase.instance.client.auth.currentUser;
@@ -159,6 +212,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     }
 
     try {
+      final payerPhone = normalizeBdPhone(phoneInput);
+      await _profileRepository.updatePhone(user.id, payerPhone);
+
       final monthlyPrice = _getMonthlyPrice();
       final rentalRes = await _rentalRepository.createRental(
         userId: user.id,
@@ -169,26 +225,35 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       );
 
       final rentalId = rentalRes['id'] as String;
-      String redirectUrl;
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session == null) {
+        throw Exception('Session expired. Please sign in again.');
+      }
 
-      try {
-        final edgeResponse = await Supabase.instance.client.functions.invoke(
-          'bkash-webhook',
-          body: {
-            'action': 'create-agreement',
-            'rental_id': rentalId,
-          },
+      final bkashResponse = await http.post(
+        Uri.parse(AppConfig.bkashCreateAgreementUrl),
+        headers: {
+          'Authorization': 'Bearer ${session.accessToken}',
+          'apikey': AppConfig.supabaseAnonKey,
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'rental_id': rentalId,
+          'payer_phone': payerPhone,
+        }),
+      );
+
+      if (bkashResponse.statusCode < 200 || bkashResponse.statusCode >= 300) {
+        throw Exception('bKash agreement failed: ${bkashResponse.body}');
+      }
+
+      final data = jsonDecode(bkashResponse.body) as Map<String, dynamic>;
+      final redirectUrl = (data['redirect_url'] ?? data['bkashURL'] ?? data['redirectURL']) as String?;
+
+      if (redirectUrl == null || redirectUrl.isEmpty) {
+        throw Exception(
+          'bKash did not return a redirect URL. Configure BKASH_* secrets in Supabase.',
         );
-        final data = edgeResponse.data;
-        if (data is Map && data['redirect_url'] != null) {
-          redirectUrl = data['redirect_url'] as String;
-        } else {
-          redirectUrl =
-              '${AppConfig.supabaseUrl}/functions/v1/bkash-webhook?action=execute-agreement&rental_id=$rentalId';
-        }
-      } catch (_) {
-        redirectUrl =
-            '${AppConfig.supabaseUrl}/functions/v1/bkash-webhook?action=execute-agreement&rental_id=$rentalId';
       }
 
       ref.read(cartProvider.notifier).clearCart();
@@ -461,6 +526,23 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             ),
           ),
         ],
+        const SizedBox(height: AppSpacing.xl),
+        Text('bKash wallet', style: context.text.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        const SizedBox(height: AppSpacing.sm),
+        Text(
+          'Your bKash number for agreement and payment. Sandbox test: ${AppConfig.bkashSandboxWallet} (PIN 12121, OTP 123456).',
+          style: context.text.bodySmall,
+        ),
+        const SizedBox(height: AppSpacing.md),
+        TextFormField(
+          controller: _bkashPhoneController,
+          keyboardType: TextInputType.phone,
+          decoration: const InputDecoration(
+            labelText: 'bKash wallet number',
+            hintText: '01770618575',
+            prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+          ),
+        ),
         const SizedBox(height: AppSpacing.xl),
         FilledButton(
           onPressed: _isVerifying ? null : _proceedToBkash,
