@@ -7,9 +7,9 @@ opencv-python-headless==4.9.0.80
 supabase==2.4.0
 tf-keras>=2.21.0
 websockets>=13,<16
-python-multipart==0.0.9
+python-multipart==0.0.31
 numpy==1.26.4
 pydantic==2.6.4
-gunicorn==21.2.0
+gunicorn==22.0.0
 mangum==0.17.0
 httpx==0.25.2
