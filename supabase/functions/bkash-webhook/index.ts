@@ -173,26 +173,34 @@ async function resolvePaymentStatus(
 
 
 async function createInitialPayment(
-
   rental: Record<string, unknown>,
-
   agreementID: string,
-
   payerPhone: string,
-
   token: string,
-
   appKey: string,
-
   rentalId: string,
-
+  supabase: ReturnType<typeof createClient>,
 ) {
+  let amount: string;
 
-  const amount = (
-
-    Number(rental.monthly_price) + Number(rental.security_deposit)
-
-  ).toString();
+  const groupId = rental.checkout_group_id as string | null | undefined;
+  if (groupId) {
+    const { data: groupTotal, error: totalErr } = await supabase.rpc(
+      "checkout_group_initial_total",
+      { p_group_id: groupId },
+    );
+    if (totalErr || groupTotal == null) {
+      throw new Error(totalErr?.message ?? "Failed to calculate checkout total");
+    }
+    amount = Number(groupTotal).toString();
+  } else {
+    amount = (
+      Number(rental.monthly_price) +
+      Number(rental.care_plus_monthly ?? 0) +
+      Number(rental.security_deposit) +
+      Number(rental.delivery_fee ?? 0)
+    ).toString();
+  }
 
 
 
@@ -517,19 +525,13 @@ serve(async (req) => {
 
 
       const paymentData = await createInitialPayment(
-
         rental!,
-
         agreementID,
-
         payerPhone,
-
         token,
-
         bkashCreds.appKey,
-
         rental_id,
-
+        supabase,
       );
 
 
@@ -657,54 +659,40 @@ serve(async (req) => {
 
 
       const { data: rental } = await supabase
-
         .from("rentals")
-
-        .select("plan_months")
-
+        .select("plan_months, checkout_group_id")
         .eq("id", rental_id)
-
         .single();
 
-
-
       const startDate = new Date();
-
       const planMonths = rental?.plan_months ?? 3;
-
       const endDate = addMonths(startDate, planMonths);
-
       const nextBilling = new Date(
-
         startDate.getTime() + 30 * 24 * 60 * 60 * 1000,
-
       );
 
+      const activationPayload = {
+        status: "awaiting_dispatch",
+        start_date: startDate.toISOString(),
+        end_date: endDate.toISOString(),
+        next_billing_date: nextBilling.toISOString(),
+        billing_retry_count: 0,
+      };
 
-
-      const { error: updateErr } = await supabase
-
-        .from("rentals")
-
-        .update({
-
-          status: "awaiting_dispatch",
-
-          start_date: startDate.toISOString(),
-
-          end_date: endDate.toISOString(),
-
-          next_billing_date: nextBilling.toISOString(),
-
-          billing_retry_count: 0,
-
-        })
-
-        .eq("id", rental_id);
-
-
-
-      if (updateErr) throw updateErr;
+      if (rental?.checkout_group_id) {
+        const { error: groupUpdateErr } = await supabase
+          .from("rentals")
+          .update(activationPayload)
+          .eq("checkout_group_id", rental.checkout_group_id)
+          .eq("status", "pending_kyc");
+        if (groupUpdateErr) throw groupUpdateErr;
+      } else {
+        const { error: updateErr } = await supabase
+          .from("rentals")
+          .update(activationPayload)
+          .eq("id", rental_id);
+        if (updateErr) throw updateErr;
+      }
 
 
 
@@ -797,19 +785,13 @@ serve(async (req) => {
       const payerPhone = rental.profiles?.phone ?? "01770618575";
 
       const paymentData = await createInitialPayment(
-
         rental,
-
         rental.bkash_agreement_id,
-
         payerPhone,
-
         token,
-
         bkashCreds.appKey,
-
         rental_id,
-
+        supabase,
       );
 
 
@@ -917,18 +899,122 @@ serve(async (req) => {
 
 
     if (req.method === "POST" && action === "execute-agreement") {
-
       return jsonResponse(
-
         { error: "execute-agreement must be completed via bKash redirect" },
-
         405,
-
       );
-
     }
 
+    // Async IPN backup — logs event and reconciles completed payments
+    if (req.method === "POST" && action === "payment-ipn") {
+      const ipnSecret = Deno.env.get("BKASH_IPN_SECRET");
+      if (ipnSecret) {
+        const provided = req.headers.get("X-BKash-IPN-Secret");
+        if (provided !== ipnSecret) {
+          return jsonResponse({ error: "Unauthorized" }, 401);
+        }
+      }
 
+      const payload = postBody ?? {};
+      const paymentID = (payload.paymentID ?? payload.paymentId) as string | undefined;
+      const rental_id = (payload.rental_id ?? url.searchParams.get("rental_id")) as string | undefined;
+
+      await supabase.from("bkash_payment_events").insert({
+        rental_id: rental_id ?? null,
+        payment_id: paymentID ?? null,
+        trx_id: (payload.trxID ?? payload.trxId) as string ?? null,
+        event_type: "ipn",
+        payload,
+      });
+
+      if (paymentID && rental_id) {
+        const { data: rental } = await supabase
+          .from("rentals")
+          .select("id, status, plan_months, checkout_group_id")
+          .eq("id", rental_id)
+          .maybeSingle();
+
+        if (rental && rental.status === "pending_kyc") {
+          const token = await getBkashToken(bkashCreds);
+          const queried = await queryBkashPayment(paymentID, token, bkashCreds.appKey);
+          if (isBkashExecuteSuccess(queried)) {
+            const startDate = new Date();
+            const planMonths = rental.plan_months ?? 3;
+            const endDate = addMonths(startDate, planMonths);
+            const nextBilling = new Date(startDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+            const activationPayload = {
+              status: "awaiting_dispatch",
+              start_date: startDate.toISOString(),
+              end_date: endDate.toISOString(),
+              next_billing_date: nextBilling.toISOString(),
+              billing_retry_count: 0,
+            };
+
+            if (rental.checkout_group_id) {
+              await supabase
+                .from("rentals")
+                .update(activationPayload)
+                .eq("checkout_group_id", rental.checkout_group_id)
+                .eq("status", "pending_kyc");
+            } else {
+              await supabase.from("rentals").update(activationPayload).eq("id", rental_id);
+            }
+
+            await supabase.from("transactions").insert({
+              rental_id,
+              amount: Number(queried.amount ?? 0),
+              bkash_payment_id: queried.trxID,
+              status: "success",
+            });
+          }
+        }
+      }
+
+      return jsonResponse({ received: true });
+    }
+
+    // Query payment status fallback (authenticated user)
+    if (req.method === "POST" && action === "query-payment") {
+      const auth = await authenticateUser(req);
+      if ("error" in auth) {
+        return jsonResponse({ error: auth.error }, auth.status);
+      }
+
+      const rental_id = postBody?.rental_id as string | undefined;
+      const payment_id = postBody?.payment_id as string | undefined;
+
+      if (!rental_id || !payment_id) {
+        return jsonResponse({ error: "rental_id and payment_id are required" }, 400);
+      }
+
+      const { data: rental } = await supabase
+        .from("rentals")
+        .select("user_id, status")
+        .eq("id", rental_id)
+        .single();
+
+      if (!rental || rental.user_id !== auth.user.id) {
+        return jsonResponse({ error: "Forbidden" }, 403);
+      }
+
+      const token = await getBkashToken(bkashCreds);
+      const queried = await queryBkashPayment(payment_id, token, bkashCreds.appKey);
+
+      await supabase.from("bkash_payment_events").insert({
+        rental_id,
+        payment_id,
+        trx_id: (queried.trxID as string) ?? null,
+        event_type: "query",
+        payload: queried,
+        processed: isBkashExecuteSuccess(queried),
+      });
+
+      return jsonResponse({
+        success: isBkashExecuteSuccess(queried),
+        payment: queried,
+        rental_status: rental.status,
+      });
+    }
 
     return jsonResponse({ error: "Invalid action" }, 400);
 

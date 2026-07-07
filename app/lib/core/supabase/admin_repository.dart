@@ -24,7 +24,18 @@ class AdminRepository {
   }
 
   Future<void> updateKycStatus(String reviewId, String status) async {
-    await _client.from('kyc_reviews').update({'status': status}).eq('id', reviewId);
+    await _client.rpc('review_kyc', params: {
+      'p_review_id': reviewId,
+      'p_status': status,
+    });
+  }
+
+  Future<String?> signedKycDocumentUrl(String storagePath) async {
+    if (storagePath.isEmpty) return null;
+    if (storagePath.startsWith('http')) return storagePath;
+    return _client.storage
+        .from('kyc-documents')
+        .createSignedUrl(storagePath, 3600);
   }
 
   Future<void> updateDeviceCondition(String itemId, String grade) async {
@@ -43,5 +54,32 @@ class AdminRepository {
 
   Future<void> activateRental(String rentalId) async {
     await _client.from('rentals').update({'status': 'active'}).eq('id', rentalId);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchDamageReports() async {
+    final response = await _client
+        .from('damage_reports')
+        .select('*, rentals(*, devices(name)), profiles(full_name, phone)')
+        .order('created_at', ascending: false);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  Future<void> reviewDamageReport(String reportId, String status, {String? notes}) async {
+    await _client.rpc('review_damage_report', params: {
+      'p_report_id': reportId,
+      'p_status': status,
+      'p_admin_notes': notes,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> fetchMrrTrend({int months = 6}) async {
+    final response = await _client.rpc('admin_mrr_trend', params: {'p_months': months});
+    return List<Map<String, dynamic>>.from(response as List);
+  }
+
+  Future<String?> signedStorageUrl(String bucket, String path) async {
+    if (path.isEmpty) return null;
+    if (path.startsWith('http')) return path;
+    return _client.storage.from(bucket).createSignedUrl(path, 3600);
   }
 }

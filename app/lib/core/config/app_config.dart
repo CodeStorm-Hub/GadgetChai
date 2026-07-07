@@ -31,4 +31,13 @@ class AppConfig {
   static String get authEmailRedirectTo => PlatformConfig.authEmailRedirectTo;
 
   static String get verifyKycUrl => '$kycServiceUrl/verify_kyc';
+
+  /// WhatsApp support — Bangladesh format without + (e.g. 88017XXXXXXXX)
+  static const supportWhatsapp = String.fromEnvironment(
+    'SUPPORT_WHATSAPP',
+    defaultValue: '8801700000000',
+  );
+
+  static const supportWhatsappMessage =
+      'Hi GadgetChai, I need help with my rental.';
 }

@@ -4,9 +4,14 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../core/design/app_spacing.dart';
+import '../../core/router.dart';
 import '../../core/theme.dart';
 import '../../core/theme_mode_provider.dart';
 import '../../core/widgets/gc_components.dart';
+import '../../core/l10n/app_strings.dart';
+import '../../core/supabase/b2b_repository.dart';
+import '../../core/supabase/review_repository.dart';
+import '../../core/widgets/whatsapp_support_button.dart';
 import '../../core/supabase/profile_repository.dart';
 import '../../core/supabase/rental_repository.dart';
 import '../../core/supabase/transaction_repository.dart';
@@ -22,16 +27,20 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
   final _profileRepository = ProfileRepository();
   final _rentalRepository = RentalRepository();
   final _transactionRepository = TransactionRepository();
+  final _b2bRepository = B2bRepository();
+  final _reviewRepository = ReviewRepository();
 
   List<Map<String, dynamic>> _rentals = [];
   List<Map<String, dynamic>> _transactions = [];
   Map<String, dynamic>? _profile;
+  Map<String, dynamic> _sustainability = {};
   bool _isLoading = true;
   String? _errorMessage;
 
-  final _addressController = TextEditingController(text: "12/A, Dhanmondi, Dhaka");
-  final _contactController = TextEditingController(text: "+8801912345678 (Brother)");
+  final _addressController = TextEditingController();
+  final _contactController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _studentIdController = TextEditingController();
 
   @override
   void initState() {
@@ -44,6 +53,7 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
     _addressController.dispose();
     _contactController.dispose();
     _phoneController.dispose();
+    _studentIdController.dispose();
     super.dispose();
   }
 
@@ -67,20 +77,49 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
       final profile = await _profileRepository.fetchProfile(user.id);
       final rentals = await _rentalRepository.fetchUserRentals(user.id);
       final transactions = await _transactionRepository.fetchForUser(user.id);
+      final sustainability = await _b2bRepository.fetchSustainabilityStats(user.id);
 
       setState(() {
         _profile = profile;
         _rentals = rentals;
         _transactions = transactions;
+        _sustainability = sustainability;
         _isLoading = false;
         _errorMessage = null;
         _phoneController.text = profile?['phone'] as String? ?? '';
+        _addressController.text = profile?['delivery_address'] as String? ?? '';
+        _contactController.text = profile?['emergency_contact'] as String? ?? '';
       });
     } catch (e) {
       setState(() {
         _errorMessage = 'Failed to load account data: $e';
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _saveFulfillmentDetails() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    final address = _addressController.text.trim();
+    final contact = _contactController.text.trim();
+    if (address.isEmpty || contact.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter delivery address and emergency contact.')),
+      );
+      return;
+    }
+
+    await _profileRepository.updateFulfillmentDetails(
+      userId: user.id,
+      deliveryAddress: address,
+      emergencyContact: contact,
+    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Fulfillment details saved.')),
+      );
     }
   }
 
@@ -118,17 +157,61 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
   }
 
   Future<void> _scheduleReturn(String rentalId) async {
+    final pickupDate = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now().add(const Duration(days: 2)),
+      firstDate: DateTime.now().add(const Duration(days: 1)),
+      lastDate: DateTime.now().add(const Duration(days: 30)),
+      helpText: 'Select pickup date',
+    );
+    if (pickupDate == null) return;
+
     try {
-      await _rentalRepository.scheduleReturn(rentalId);
+      await _rentalRepository.scheduleReturnWithPickup(
+        rentalId,
+        DateTime(pickupDate.year, pickupDate.month, pickupDate.day, 10),
+      );
       await _fetchUserData();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Return pickup scheduled successfully.')),
+        SnackBar(content: Text('Return scheduled for ${DateFormat.yMMMd().format(pickupDate)}.')),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to schedule return: $e'), backgroundColor: context.colors.error),
+      );
+    }
+  }
+
+  Future<void> _extendRental(String rentalId) async {
+    final months = await showDialog<int>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Extend rental'),
+        children: [1, 3, 6]
+            .map(
+              (m) => SimpleDialogOption(
+                onPressed: () => Navigator.pop(context, m),
+                child: Text('+$m month${m > 1 ? 's' : ''}'),
+              ),
+            )
+            .toList(),
+      ),
+    );
+    if (months == null) return;
+
+    try {
+      await _rentalRepository.extendRental(rentalId, months);
+      await _fetchUserData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Rental extended by $months month(s).')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Extension failed: $e'), backgroundColor: context.colors.error),
       );
     }
   }
@@ -145,6 +228,7 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final user = Supabase.instance.client.auth.currentUser;
+    final isAdmin = ref.watch(userRoleProvider).valueOrNull == 'admin';
 
     if (_isLoading) {
       return Scaffold(
@@ -191,6 +275,12 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
               ],
             ),
             actions: [
+              if (isAdmin)
+                IconButton(
+                  icon: const Icon(Icons.admin_panel_settings_outlined),
+                  tooltip: 'Admin dashboard',
+                  onPressed: () => context.push('/admin'),
+                ),
               IconButton(
                 icon: const Icon(Icons.logout_rounded),
                 onPressed: _logOut,
@@ -203,6 +293,14 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 _buildProfileOverview(textTheme),
+                const SizedBox(height: AppSpacing.lg),
+                _buildSustainabilityCard(),
+                const SizedBox(height: AppSpacing.lg),
+                _buildQuickLinks(),
+                const SizedBox(height: AppSpacing.lg),
+                const WhatsappSupportBanner(),
+                const SizedBox(height: AppSpacing.lg),
+                _buildDiscountPrograms(),
                 const SizedBox(height: AppSpacing.xl),
                 _buildAppearanceSection(),
                 const SizedBox(height: AppSpacing.xl),
@@ -333,6 +431,19 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
               ref.read(themeModeProvider.notifier).state = selection.first;
             },
           ),
+          const SizedBox(height: AppSpacing.lg),
+          Text(ref.watch(stringsProvider).language, style: context.text.titleSmall),
+          const SizedBox(height: AppSpacing.sm),
+          SegmentedButton<AppLocale>(
+            segments: [
+              ButtonSegment(value: AppLocale.en, label: Text(ref.watch(stringsProvider).english)),
+              ButtonSegment(value: AppLocale.bn, label: Text(ref.watch(stringsProvider).bangla)),
+            ],
+            selected: {ref.watch(localeProvider)},
+            onSelectionChanged: (selection) {
+              ref.read(localeProvider.notifier).setLocale(selection.first);
+            },
+          ),
         ],
       ),
     );
@@ -450,6 +561,14 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.tonal(
+              onPressed: _saveFulfillmentDetails,
+              child: const Text('Save fulfillment details'),
+            ),
           ),
           const SizedBox(height: 24),
           Text('Increase trust score', style: context.text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
@@ -594,12 +713,23 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
             runSpacing: 8,
             children: [
               OutlinedButton(
+                onPressed: rental['status'] == 'active'
+                    ? () => _extendRental(rental['id'] as String)
+                    : null,
+                child: const Text('Extend'),
+              ),
+              OutlinedButton(
                 onPressed: () {
                   context.push('/my-tech/damage-report?rental_id=${rental['id']}');
                 },
                 style: OutlinedButton.styleFrom(foregroundColor: scheme.error, side: BorderSide(color: scheme.error)),
                 child: const Text('Report damage'),
               ),
+              if (rental['status'] == 'returned')
+                OutlinedButton(
+                  onPressed: () => _promptReview(rental['id'] as String),
+                  child: Text(ref.watch(stringsProvider).writeReview),
+                ),
               FilledButton(
                 onPressed: rental['status'] == 'returned' ? null : () => _scheduleReturn(rental['id']),
                 child: Text(rental['status'] == 'returned' ? 'Returned' : 'Schedule return'),
@@ -609,6 +739,173 @@ class _MyTechScreenState extends ConsumerState<MyTechScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildSustainabilityCard() {
+    final s = ref.watch(stringsProvider);
+    final co2 = _sustainability['estimated_co2_kg_saved'] as int? ?? 0;
+    final devices = _sustainability['devices_kept_active'] as int? ?? 0;
+
+    return GcCard(
+      color: context.colors.secondaryContainer.withValues(alpha: 0.35),
+      child: Row(
+        children: [
+          Icon(Icons.eco_rounded, color: context.colors.secondary, size: 36),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(s.sustainability, style: context.text.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                Text('$s.co2Saved: ~${co2}kg', style: context.text.bodySmall),
+                Text('${s.devicesActive}: $devices', style: context.text.bodySmall),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickLinks() {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () => context.push('/wishlist'),
+            icon: const Icon(Icons.favorite_border_rounded, size: 18),
+            label: Text(ref.watch(stringsProvider).wishlist),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () => context.push('/business'),
+            icon: const Icon(Icons.business_center_outlined, size: 18),
+            label: Text(ref.watch(stringsProvider).business),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDiscountPrograms() {
+    final discount = (_profile?['discount_percent'] as num?)?.toDouble() ?? 0;
+    final s = ref.watch(stringsProvider);
+
+    return GcCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Discount programs', style: context.text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+          if (discount > 0) ...[
+            const SizedBox(height: 8),
+            Text('Active: ${discount.toInt()}% off monthly rent', style: context.text.bodyMedium),
+          ],
+          const SizedBox(height: AppSpacing.md),
+          Text(s.studentDiscount, style: context.text.bodySmall),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _studentIdController,
+                  decoration: const InputDecoration(
+                    labelText: 'Student ID number',
+                    hintText: 'NID / student card',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton.tonal(
+                onPressed: () async {
+                  final user = Supabase.instance.client.auth.currentUser;
+                  if (user == null) return;
+                  try {
+                    await _b2bRepository.applyDiscountProgram(
+                      accountType: 'student',
+                      identifier: _studentIdController.text.trim(),
+                    );
+                    await _fetchUserData();
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Student discount applied (10%).')),
+                    );
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('$e'), backgroundColor: context.colors.error),
+                    );
+                  }
+                },
+                child: const Text('Apply'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _promptReview(String rentalId) async {
+    var rating = 5;
+    final reviewController = TextEditingController();
+
+    final submitted = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(ref.watch(stringsProvider).writeReview),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (i) {
+                  return IconButton(
+                    onPressed: () => setDialogState(() => rating = i + 1),
+                    icon: Icon(
+                      i < rating ? Icons.star_rounded : Icons.star_border_rounded,
+                      color: context.colors.tertiary,
+                    ),
+                  );
+                }),
+              ),
+              TextField(
+                controller: reviewController,
+                maxLines: 3,
+                decoration: const InputDecoration(hintText: 'Share your experience (optional)'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Submit')),
+          ],
+        ),
+      ),
+    );
+
+    if (submitted != true) return;
+
+    try {
+      await _reviewRepository.submitReview(
+        rentalId: rentalId,
+        rating: rating,
+        reviewText: reviewController.text.trim().isEmpty ? null : reviewController.text.trim(),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Thank you for your review!')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: context.colors.error),
+      );
+    } finally {
+      reviewController.dispose();
+    }
   }
 
   Widget _buildTransactionTile(Map<String, dynamic> tx) {

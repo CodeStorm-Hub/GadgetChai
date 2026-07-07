@@ -3,6 +3,7 @@ import re
 import tempfile
 from typing import Optional
 
+import httpx
 import cv2
 import numpy as np
 from deepface import DeepFace
@@ -26,6 +27,8 @@ app.add_middleware(
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 KYC_ALLOW_MOCK = os.getenv("KYC_ALLOW_MOCK", "false").lower() == "true"
+NID_VERIFY_URL = os.getenv("NID_VERIFY_URL", "")
+NID_VERIFY_API_KEY = os.getenv("NID_VERIFY_API_KEY", "")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -71,6 +74,30 @@ def parse_nid_details(ocr_text_list: list[str]) -> dict:
     }
 
 
+async def verify_nid_with_server(nid_number: Optional[str], name: Optional[str]) -> dict:
+    """Optional Election Commission NID server check (BFIU compliance path)."""
+    if not NID_VERIFY_URL or not nid_number:
+        return {"verified": None, "skipped": True}
+
+    headers = {"Content-Type": "application/json"}
+    if NID_VERIFY_API_KEY:
+        headers["Authorization"] = f"Bearer {NID_VERIFY_API_KEY}"
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                NID_VERIFY_URL,
+                json={"nid_number": nid_number, "name": name},
+                headers=headers,
+            )
+        if response.status_code != 200:
+            return {"verified": False, "error": response.text}
+        data = response.json()
+        return {"verified": data.get("verified", data.get("match", False)), "raw": data}
+    except Exception as exc:
+        return {"verified": False, "error": str(exc)}
+
+
 def upload_kyc_document(user_id: str, label: str, content: bytes, content_type: str) -> str:
     path = f"{user_id}/{label}-{os.urandom(4).hex()}.jpg"
     supabase.storage.from_("kyc-documents").upload(
@@ -95,6 +122,21 @@ async def verify_kyc(
     authorization: Optional[str] = Header(default=None),
 ):
     await verify_supabase_user(authorization, user_id)
+
+    limit_result = supabase.rpc(
+        "check_and_record_kyc_attempt", {"p_user_id": user_id}
+    ).execute()
+    limit_data = limit_result.data
+    if isinstance(limit_data, list) and limit_data:
+        limit_data = limit_data[0]
+    if isinstance(limit_data, dict) and not limit_data.get("allowed", True):
+        raise HTTPException(
+            status_code=429,
+            detail=limit_data.get(
+                "reason",
+                "KYC attempt limit reached. Please try again later or contact support.",
+            ),
+        )
 
     front_bytes = await nid_front.read()
     back_bytes = await nid_back.read()
@@ -133,6 +175,18 @@ async def verify_kyc(
                 status_code=422,
                 detail=f"OCR extraction failed: {ocr_err}",
             ) from ocr_err
+
+    nid_server = await verify_nid_with_server(
+        parsed_data.get("nid_number"),
+        parsed_data.get("name"),
+    )
+    if nid_server.get("verified") is False and not KYC_ALLOW_MOCK:
+        return {
+            "verified": False,
+            "status": "rejected",
+            "reason": "NID could not be verified against the national database.",
+            "nid_server": nid_server,
+        }
 
     similarity_score = 0.0
     status = "pending"

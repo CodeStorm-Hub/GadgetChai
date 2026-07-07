@@ -10,6 +10,7 @@ import '../../core/design/app_spacing.dart';
 import '../../core/theme.dart';
 import '../../core/widgets/gc_components.dart';
 import '../../core/supabase/profile_repository.dart';
+import '../../core/supabase/referral_repository.dart';
 
 enum _AuthMode { signIn, signUp, confirmPending, forgotPassword, updatePassword }
 
@@ -22,10 +23,12 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _profileRepository = ProfileRepository();
+  final _referralRepository = ReferralRepository();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _fullNameController = TextEditingController();
+  final _referralCodeController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
   _AuthMode _mode = _AuthMode.signIn;
@@ -56,6 +59,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _fullNameController.dispose();
+    _referralCodeController.dispose();
     super.dispose();
   }
 
@@ -66,6 +70,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       user.id,
       fullName: user.userMetadata?['full_name'] as String?,
     );
+
+    final referralCode = _referralCodeController.text.trim();
+    if (referralCode.isNotEmpty) {
+      try {
+        final result = await _referralRepository.applyReferralCode(referralCode);
+        if (result['success'] != true && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(result['error'] as String? ?? 'Referral code could not be applied.')),
+          );
+        }
+      } catch (_) {
+        // Non-blocking — account still works without referral
+      }
+    }
+
     if (mounted) context.go('/');
   }
 
@@ -344,6 +363,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           decoration: const InputDecoration(
             labelText: 'Full name (optional)',
             prefixIcon: Icon(Icons.person_outline_rounded),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        TextFormField(
+          controller: _referralCodeController,
+          textCapitalization: TextCapitalization.characters,
+          textInputAction: TextInputAction.next,
+          decoration: const InputDecoration(
+            labelText: 'Referral code (optional)',
+            prefixIcon: Icon(Icons.card_giftcard_outlined),
+            hintText: 'FRIEND500',
           ),
         ),
         const SizedBox(height: AppSpacing.lg),

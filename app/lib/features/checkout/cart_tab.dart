@@ -216,10 +216,8 @@ class _CartTabState extends ConsumerState<CartTab> {
                                 shape: RoundedRectangleBorder(borderRadius: AppShapes.pill),
                               ),
                               onPressed: () {
-                                final mainItem = cartList.first;
                                 context.push('/checkout', extra: {
-                                  'deviceId': mainItem.device['id'],
-                                  'planMonths': mainItem.selectedTerm,
+                                  'cartItems': cartList,
                                 });
                               },
                               child: const Text('Checkout'),

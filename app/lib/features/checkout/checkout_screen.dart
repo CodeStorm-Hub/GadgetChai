@@ -16,13 +16,15 @@ import '../../core/supabase/rental_repository.dart';
 import 'cart_provider.dart';
 
 class CheckoutScreen extends ConsumerStatefulWidget {
-  final String deviceId;
-  final int planMonths;
+  final String? deviceId;
+  final int? planMonths;
+  final List<CartItem>? cartItems;
 
   const CheckoutScreen({
     super.key,
-    required this.deviceId,
-    required this.planMonths,
+    this.deviceId,
+    this.planMonths,
+    this.cartItems,
   });
 
   @override
@@ -53,13 +55,49 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   String _extractedNid = '';
 
   Map<String, dynamic>? _device;
+  List<CartItem> _checkoutItems = [];
+  bool _kycAlreadyVerified = false;
+  String _paymentMethod = 'bkash';
+  double _profileDiscountPercent = 0;
 
   @override
   void initState() {
     super.initState();
-    _fetchDeviceDetails();
+    _checkoutItems = widget.cartItems ?? [];
+    if (_checkoutItems.isEmpty && widget.deviceId != null && widget.deviceId!.isNotEmpty) {
+      _fetchDeviceDetails();
+    } else if (_checkoutItems.isNotEmpty) {
+      _hydrateCheckoutItems();
+    }
     _loadBkashPhone();
   }
+
+  Future<void> _hydrateCheckoutItems() async {
+    setState(() => _device = _checkoutItems.first.device);
+  }
+
+  double _getMonthlyPriceForItem(CartItem item) {
+    return ref.read(cartProvider.notifier).getPriceForTerm(item.device, item.selectedTerm);
+  }
+
+  double _getCheckoutMonthlySubtotal() {
+    double subtotal;
+    if (_checkoutItems.isNotEmpty) {
+      subtotal = _checkoutItems.fold<double>(0, (sum, item) {
+        var rate = _getMonthlyPriceForItem(item);
+        if (item.addCarePlus) rate += 450;
+        return sum + rate * item.quantity;
+      });
+    } else {
+      subtotal = _getMonthlyPrice();
+    }
+    if (_profileDiscountPercent > 0) {
+      subtotal *= (1 - _profileDiscountPercent / 100);
+    }
+    return subtotal;
+  }
+
+  double _getDeliveryFee() => _checkoutItems.isNotEmpty || _device != null ? 200.0 : 0.0;
 
   @override
   void dispose() {
@@ -71,6 +109,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
     final profile = await _profileRepository.fetchProfile(user.id);
+    final kycStatus = profile?['kyc_status'] as String?;
+    _profileDiscountPercent = (profile?['discount_percent'] as num?)?.toDouble() ?? 0;
+    if (kycStatus == 'verified' && mounted) {
+      setState(() {
+        _kycAlreadyVerified = true;
+        _kycVerified = true;
+        _kycStatus = 'approved';
+        _securityDeposit = 0;
+        _currentStep = 3;
+      });
+    }
     final phone = profile?['phone'] as String?;
     if (phone != null && phone.isNotEmpty && mounted) {
       _bkashPhoneController.text = phone;
@@ -81,9 +130,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   Future<void> _fetchDeviceDetails() async {
     try {
-      final device = await _deviceRepository.fetchById(widget.deviceId);
+      final device = await _deviceRepository.fetchById(widget.deviceId!);
+      final term = widget.planMonths ?? 3;
       setState(() {
         _device = device;
+        _checkoutItems = [
+          CartItem(
+            id: 'single',
+            device: device,
+            selectedTerm: term,
+          ),
+        ];
         _errorMessage = null;
       });
     } catch (e) {
@@ -95,7 +152,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   double _getMonthlyPrice() {
     if (_device == null) return 0;
-    switch (widget.planMonths) {
+    final term = widget.planMonths ?? 3;
+    switch (term) {
       case 1:
         return (_device!['monthly_price_1m'] as num).toDouble();
       case 3:
@@ -215,16 +273,29 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       final payerPhone = normalizeBdPhone(phoneInput);
       await _profileRepository.updatePhone(user.id, payerPhone);
 
-      final monthlyPrice = _getMonthlyPrice();
-      final rentalRes = await _rentalRepository.createRental(
+      final deliveryFee = _getDeliveryFee();
+
+      final checkoutItems = _checkoutItems.expand((item) {
+        return List.generate(item.quantity, (_) => item);
+      }).map((item) {
+        return CheckoutRentalItem(
+          deviceId: item.device['id'] as String,
+          planMonths: item.selectedTerm,
+          monthlyPrice: _getMonthlyPriceForItem(item) *
+              (1 - _profileDiscountPercent / 100),
+          selectedColor: item.selectedColor,
+          carePlusMonthly: item.addCarePlus ? 450.0 : 0.0,
+        );
+      }).toList();
+
+      final checkout = await _rentalRepository.createCheckoutRentals(
         userId: user.id,
-        deviceId: widget.deviceId,
-        planMonths: widget.planMonths,
-        monthlyPrice: monthlyPrice,
+        items: checkoutItems,
         securityDeposit: _securityDeposit,
+        deliveryFee: deliveryFee,
       );
 
-      final rentalId = rentalRes['id'] as String;
+      final rentalId = checkout.primaryRental['id'] as String;
       final session = Supabase.instance.client.auth.currentSession;
       if (session == null) {
         throw Exception('Session expired. Please sign in again.');
@@ -286,8 +357,26 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 GcStepIndicator(steps: _stepLabels, currentStep: _currentStep),
+                if (_kycAlreadyVerified) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  GcCard(
+                    color: context.colors.secondaryContainer.withValues(alpha: 0.35),
+                    child: Row(
+                      children: [
+                        Icon(Icons.verified_rounded, color: context.colors.secondary),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            'KYC already verified — skipping document upload.',
+                            style: context.text.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.xl),
-                if (_device != null) _buildOrderSummary(context),
+                if (_checkoutItems.isNotEmpty) _buildOrderSummary(context),
                 const SizedBox(height: AppSpacing.lg),
                 GcCard(
                   child: _buildStepContent(context),
@@ -301,38 +390,73 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   }
 
   Widget _buildOrderSummary(BuildContext context) {
-    return GcCard(
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: AppShapes.image,
-            child: Image.network(
-              _device!['image_url'] as String? ?? '',
-              width: 56,
-              height: 56,
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => Container(
+    if (_checkoutItems.isEmpty) return const SizedBox.shrink();
+
+    if (_checkoutItems.length == 1) {
+      final item = _checkoutItems.first;
+      final device = item.device;
+      return GcCard(
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: AppShapes.image,
+              child: Image.network(
+                device['image_url'] as String? ?? '',
                 width: 56,
                 height: 56,
-                color: context.colors.surfaceContainerHigh,
-                child: Icon(Icons.devices, color: context.colors.primary),
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Container(
+                  width: 56,
+                  height: 56,
+                  color: context.colors.surfaceContainerHigh,
+                  child: Icon(Icons.devices, color: context.colors.primary),
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: AppSpacing.lg),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_device!['name'] as String? ?? '', style: context.text.titleMedium),
-                Text(
-                  '${widget.planMonths}-month plan',
-                  style: context.text.bodySmall,
-                ),
-              ],
+            const SizedBox(width: AppSpacing.lg),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(device['name'] as String? ?? '', style: context.text.titleMedium),
+                  Text('${item.selectedTerm}-month plan', style: context.text.bodySmall),
+                  if (item.addCarePlus)
+                    Text('Care Plus included', style: context.text.bodySmall),
+                ],
+              ),
             ),
+            GcPriceTag(amount: _getMonthlyPriceForItem(item), compact: true),
+          ],
+        ),
+      );
+    }
+
+    return GcCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('${_checkoutItems.length} devices', style: context.text.titleMedium),
+          const SizedBox(height: AppSpacing.md),
+          ..._checkoutItems.map((item) {
+            final rate = _getMonthlyPriceForItem(item) + (item.addCarePlus ? 450 : 0);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: Row(
+                children: [
+                  Expanded(child: Text('${item.device['name']} · ${item.selectedTerm}mo')),
+                  Text('৳${(rate * item.quantity).toInt()}'),
+                ],
+              ),
+            );
+          }),
+          const Divider(),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Delivery', style: context.text.bodyMedium),
+              Text('৳${_getDeliveryFee().toInt()}'),
+            ],
           ),
-          GcPriceTag(amount: _getMonthlyPrice(), compact: true),
         ],
       ),
     );
@@ -443,8 +567,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   }
 
   Widget _buildKycSummaryStep(BuildContext context) {
-    final monthlyPrice = _getMonthlyPrice();
-    final totalInitialCharge = monthlyPrice + _securityDeposit;
+    final monthlyPrice = _getCheckoutMonthlySubtotal();
+    final deliveryFee = _getDeliveryFee();
+    final totalInitialCharge = monthlyPrice + deliveryFee + _securityDeposit;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -487,6 +612,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           child: Column(
             children: [
               _buildSummaryRow('1st month rent', '৳${monthlyPrice.toInt()}'),
+              if (deliveryFee > 0) ...[
+                const SizedBox(height: AppSpacing.sm),
+                _buildSummaryRow('Delivery (one-time)', '৳${deliveryFee.toInt()}'),
+              ],
               const SizedBox(height: AppSpacing.sm),
               _buildSummaryRow(
                 'Security deposit',
@@ -524,6 +653,33 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 ),
               ],
             ),
+          ),
+        ],
+        const SizedBox(height: AppSpacing.xl),
+        Text('Payment method', style: context.text.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        const SizedBox(height: AppSpacing.sm),
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(value: 'bkash', label: Text('bKash'), icon: Icon(Icons.account_balance_wallet_outlined)),
+            ButtonSegment(value: 'nagad', label: Text('Nagad'), icon: Icon(Icons.payments_outlined)),
+          ],
+          selected: {_paymentMethod},
+          onSelectionChanged: (selection) {
+            final method = selection.first;
+            if (method == 'nagad') {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Nagad integration coming soon. Using bKash for now.')),
+              );
+              return;
+            }
+            setState(() => _paymentMethod = method);
+          },
+        ),
+        if (_profileDiscountPercent > 0) ...[
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            'Program discount: ${_profileDiscountPercent.toInt()}% applied to monthly rent',
+            style: context.text.bodySmall?.copyWith(color: context.colors.secondary),
           ),
         ],
         const SizedBox(height: AppSpacing.xl),

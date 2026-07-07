@@ -56,6 +56,17 @@ class ProfileRepository {
         .update({'trust_score': trustScore.clamp(0, 100)})
         .eq('id', userId);
   }
+
+  Future<void> updateFulfillmentDetails({
+    required String userId,
+    required String deliveryAddress,
+    required String emergencyContact,
+  }) async {
+    await _client.from('profiles').update({
+      'delivery_address': deliveryAddress,
+      'emergency_contact': emergencyContact,
+    }).eq('id', userId);
+  }
 }
 
 /// Normalizes Bangladesh mobile numbers to local `01XXXXXXXXX` format.

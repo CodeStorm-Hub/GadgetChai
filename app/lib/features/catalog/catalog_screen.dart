@@ -8,6 +8,7 @@ import '../../core/design/app_spacing.dart';
 import '../../core/theme.dart';
 import '../../core/widgets/gc_components.dart';
 import '../../core/supabase/device_repository.dart';
+import 'compare_provider.dart';
 
 final selectedCategoryProvider = StateProvider<String>((ref) => 'All');
 final selectedBrandProvider = StateProvider<String>((ref) => 'All');
@@ -161,6 +162,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
       );
     }
 
+    final compareCount = ref.watch(compareProvider).length;
+
     return Scaffold(
       backgroundColor: context.colors.surfaceContainerLowest,
       appBar: _CatalogExpressiveAppBar(
@@ -191,6 +194,13 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
           ],
         ),
       ),
+      floatingActionButton: compareCount > 0
+          ? FloatingActionButton.extended(
+              onPressed: () => context.push('/compare'),
+              icon: const Icon(Icons.compare_arrows_rounded),
+              label: Text('Compare ($compareCount)'),
+            )
+          : null,
     );
   }
 

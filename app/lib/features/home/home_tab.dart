@@ -10,6 +10,9 @@ import '../../core/theme.dart';
 import '../../core/widgets/gc_components.dart';
 import '../../core/supabase/device_repository.dart';
 import '../../core/supabase/home_repository.dart';
+import '../../core/supabase/referral_repository.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/services.dart';
 import '../../features/navigation/main_navigation_frame.dart';
 import '../../features/catalog/catalog_screen.dart';
 
@@ -23,6 +26,7 @@ class HomeTab extends ConsumerStatefulWidget {
 class _HomeTabState extends ConsumerState<HomeTab> {
   final _deviceRepository = DeviceRepository();
   final _homeRepository = HomeRepository();
+  final _referralRepository = ReferralRepository();
   final _pageController = PageController(viewportFraction: 0.92);
   int _currentBannerPage = 0;
 
@@ -74,6 +78,69 @@ class _HomeTabState extends ConsumerState<HomeTab> {
       ref.read(selectedCategoryProvider.notifier).state = category;
     }
     ref.read(activeTabProvider.notifier).state = 1;
+  }
+
+  void _openReferralSheet() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      if (mounted) context.push('/auth');
+      return;
+    }
+
+    final code = await _referralRepository.fetchReferralCode(user.id);
+    final referralCount = await _referralRepository.countReferrals(user.id);
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Your referral code', style: context.text.titleLarge),
+              const SizedBox(height: AppSpacing.md),
+              SelectableText(
+                code ?? '—',
+                style: context.text.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Friends enter this code after signing up. You both earn ৳500 credit when they complete their first rental.',
+                style: context.text.bodyMedium,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                '$referralCount friends referred',
+                style: context.text.labelLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              FilledButton.icon(
+                onPressed: code == null
+                    ? null
+                    : () {
+                        Clipboard.setData(ClipboardData(text: code));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Referral code copied!')),
+                        );
+                      },
+                icon: const Icon(Icons.copy_rounded),
+                label: const Text('Copy code'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Color _parseColor(String? hex, Color fallback) {
@@ -250,9 +317,9 @@ class _HomeTabState extends ConsumerState<HomeTab> {
           ),
           const SizedBox(width: AppSpacing.sm),
           GcQuickActionTile(
-            icon: Icons.shield_outlined,
-            label: 'Care Plus',
-            onTap: () => _openExplore(),
+            icon: Icons.business_center_outlined,
+            label: 'For business',
+            onTap: () => context.push('/business'),
           ),
         ],
       ),
@@ -420,7 +487,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                       minimumSize: const Size(0, 44),
                       shape: RoundedRectangleBorder(borderRadius: AppShapes.pill),
                     ),
-                    onPressed: () {},
+                    onPressed: _openReferralSheet,
                     child: const Text('Learn more'),
                   ),
                 ],

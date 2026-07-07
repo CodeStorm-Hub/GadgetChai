@@ -6,11 +6,15 @@ import 'dart:async';
 
 import '../features/auth/login_screen.dart';
 import '../features/catalog/device_details_screen.dart';
+import '../features/checkout/cart_provider.dart';
 import '../features/checkout/checkout_screen.dart';
 import '../features/checkout/camera_kyc_screen.dart';
 import '../features/checkout/bkash_agreement_webview.dart';
 import '../features/rentals/my_tech_screen.dart';
 import '../features/rentals/damage_report_screen.dart';
+import '../features/business/business_portal_screen.dart';
+import '../features/catalog/device_comparison_screen.dart';
+import '../features/catalog/wishlist_screen.dart';
 import '../features/admin/admin_dashboard_screen.dart';
 import '../features/navigation/main_navigation_frame.dart';
 import '../features/onboarding/onboarding_screen.dart';
@@ -100,9 +104,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/checkout',
         builder: (context, state) {
           final extra = state.extra as Map<String, dynamic>?;
-          final deviceId = extra?['deviceId'] as String? ?? '';
-          final planMonths = extra?['planMonths'] as int? ?? 3;
-          return CheckoutScreen(deviceId: deviceId, planMonths: planMonths);
+          final cartItems = extra?['cartItems'] as List<CartItem>?;
+          final deviceId = extra?['deviceId'] as String?;
+          final planMonths = extra?['planMonths'] as int?;
+          return CheckoutScreen(
+            cartItems: cartItems,
+            deviceId: deviceId,
+            planMonths: planMonths,
+          );
         },
         routes: [
           GoRoute(
@@ -150,6 +159,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/admin',
         builder: (context, state) => const AdminDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/compare',
+        builder: (context, state) => const DeviceComparisonScreen(),
+      ),
+      GoRoute(
+        path: '/wishlist',
+        builder: (context, state) => const WishlistScreen(),
+      ),
+      GoRoute(
+        path: '/business',
+        builder: (context, state) => const BusinessPortalScreen(),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(

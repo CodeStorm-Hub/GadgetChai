@@ -590,7 +590,7 @@ Bangladesh Financial Intelligence Unit updated e-KYC guidelines with **December 
 | P0 | Admin KYC approve → sync `profiles.kyc_status` + trust_score | Small |
 | P0 | Persist delivery address to database | Small |
 | P0 | bKash Query Payment API + IPN fallback | Medium |
-| P0 | Deploy ML worker to VPS (remove ngrok dependency) | Medium |
+| P0 | Deploy ML worker to VPS (remove ngrok dependency) | Medium | ✅ Docs: `docs/ML_WORKER_VPS.md` |
 | P1 | Wire referral banner to basic referral code system | Medium |
 | P1 | Admin nav link for admin users | Small |
 | P1 | Signed URLs for KYC images in admin | Small |

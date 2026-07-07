@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class CartItem {
-  final String id; // Unique ID in cart
+  final String id;
   final Map<String, dynamic> device;
   final String selectedColor;
   final int selectedTerm;
@@ -32,21 +35,66 @@ class CartItem {
       quantity: quantity ?? this.quantity,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'device': device,
+        'selectedColor': selectedColor,
+        'selectedTerm': selectedTerm,
+        'addCarePlus': addCarePlus,
+        'quantity': quantity,
+      };
+
+  factory CartItem.fromJson(Map<String, dynamic> json) {
+    return CartItem(
+      id: json['id'] as String,
+      device: Map<String, dynamic>.from(json['device'] as Map),
+      selectedColor: json['selectedColor'] as String? ?? 'Silver',
+      selectedTerm: json['selectedTerm'] as int? ?? 3,
+      addCarePlus: json['addCarePlus'] as bool? ?? false,
+      quantity: json['quantity'] as int? ?? 1,
+    );
+  }
 }
 
 class CartNotifier extends StateNotifier<List<CartItem>> {
-  CartNotifier() : super([]);
+  CartNotifier() : super([]) {
+    _restore();
+  }
+
+  static const _storageKey = 'gadgetchai_cart_v1';
+
+  Future<void> _restore() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_storageKey);
+      if (raw == null || raw.isEmpty) return;
+      final list = jsonDecode(raw) as List<dynamic>;
+      state = list
+          .map((e) => CartItem.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList();
+    } catch (_) {
+      // Corrupt cache — start fresh
+    }
+  }
+
+  Future<void> _persist() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final encoded = jsonEncode(state.map((item) => item.toJson()).toList());
+      await prefs.setString(_storageKey, encoded);
+    } catch (_) {
+      // Non-fatal
+    }
+  }
 
   void addToCart(Map<String, dynamic> device, {int term = 3, String color = 'Silver'}) {
-    // Check if device already in cart with same term/color
-    final index = state.indexWhere((item) => 
-      item.device['id'] == device['id'] && 
-      item.selectedTerm == term && 
-      item.selectedColor == color
-    );
+    final index = state.indexWhere((item) =>
+        item.device['id'] == device['id'] &&
+        item.selectedTerm == term &&
+        item.selectedColor == color);
 
     if (index >= 0) {
-      // Increment quantity
       final item = state[index];
       state = [
         ...state.sublist(0, index),
@@ -54,7 +102,6 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
         ...state.sublist(index + 1),
       ];
     } else {
-      // Add new item
       final newItem = CartItem(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         device: device,
@@ -63,10 +110,12 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
       );
       state = [...state, newItem];
     }
+    _persist();
   }
 
   void removeFromCart(String cartItemId) {
     state = state.where((item) => item.id != cartItemId).toList();
+    _persist();
   }
 
   void updateTerm(String cartItemId, int term) {
@@ -76,6 +125,7 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
       }
       return item;
     }).toList();
+    _persist();
   }
 
   void updateColor(String cartItemId, String color) {
@@ -85,6 +135,7 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
       }
       return item;
     }).toList();
+    _persist();
   }
 
   void toggleCarePlus(String cartItemId, bool enabled) {
@@ -94,29 +145,35 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
       }
       return item;
     }).toList();
+    _persist();
   }
 
   void clearCart() {
     state = [];
+    _persist();
   }
 
-  // Calculation utilities
   double getPriceForTerm(Map<String, dynamic> device, int term) {
     switch (term) {
-      case 1: return (device['monthly_price_1m'] as num).toDouble();
-      case 3: return (device['monthly_price_3m'] as num).toDouble();
-      case 6: return (device['monthly_price_6m'] as num).toDouble();
-      case 12: return (device['monthly_price_12m'] as num).toDouble();
-      default: return (device['monthly_price_3m'] as num).toDouble();
+      case 1:
+        return (device['monthly_price_1m'] as num).toDouble();
+      case 3:
+        return (device['monthly_price_3m'] as num).toDouble();
+      case 6:
+        return (device['monthly_price_6m'] as num).toDouble();
+      case 12:
+        return (device['monthly_price_12m'] as num).toDouble();
+      default:
+        return (device['monthly_price_3m'] as num).toDouble();
     }
   }
 
   double getMonthlySubtotal() {
     double sub = 0;
-    for (var item in state) {
+    for (final item in state) {
       double rate = getPriceForTerm(item.device, item.selectedTerm);
       if (item.addCarePlus) {
-        rate += 450.0; // GadgetChai Care Plus = 450 BDT / month
+        rate += 450.0;
       }
       sub += rate * item.quantity;
     }
@@ -124,7 +181,6 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
   }
 
   double getOneTimeDelivery() {
-    // Standard one-time dispatch delivery = 200 BDT
     return state.isEmpty ? 0 : 200.0;
   }
 

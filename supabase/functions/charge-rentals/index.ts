@@ -109,7 +109,9 @@ serve(async (req) => {
             agreementID: rental.bkash_agreement_id,
             payerReference: rental.profiles?.phone ?? "01700000000",
             callbackURL: "https://example.com/unused-callback",
-            amount: rental.monthly_price.toString(),
+            amount: (
+              Number(rental.monthly_price) + Number(rental.care_plus_monthly ?? 0)
+            ).toString(),
             currency: "BDT",
             intent: "sale",
             merchantInvoiceNumber:
@@ -172,7 +174,7 @@ serve(async (req) => {
 
           await supabase.from("transactions").insert({
             rental_id: rental.id,
-            amount: rental.monthly_price,
+            amount: Number(rental.monthly_price) + Number(rental.care_plus_monthly ?? 0),
             bkash_payment_id: finalData.trxID,
             status: "success",
           });
@@ -195,7 +197,7 @@ serve(async (req) => {
 
         await supabase.from("transactions").insert({
           rental_id: rental.id,
-          amount: rental.monthly_price,
+          amount: Number(rental.monthly_price) + Number(rental.care_plus_monthly ?? 0),
           status: "failed",
         });
 

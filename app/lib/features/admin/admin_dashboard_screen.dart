@@ -28,6 +28,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> wit
   List<Map<String, dynamic>> _devicesLedger = [];
   List<Map<String, dynamic>> _kycQueue = [];
   List<Map<String, dynamic>> _fulfillmentOrders = [];
+  List<Map<String, dynamic>> _damageReports = [];
+  List<Map<String, dynamic>> _mrrTrend = [];
 
   // Metrics
   double _mrr = 285000;
@@ -37,7 +39,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> wit
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _loadAdminData();
   }
 
@@ -58,6 +60,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> wit
       final kycQueue = await _adminRepository.fetchPendingKycReviews();
       final fulfillmentOrders = await _rentalRepository.fetchAllRentals();
       final mrr = await _rentalRepository.calculateMrr();
+      final mrrTrend = await _adminRepository.fetchMrrTrend();
+      final damageReports = await _adminRepository.fetchDamageReports();
 
       final rentedCount = devicesLedger.where((d) => d['status'] == 'rented').length;
       final totalCount = devicesLedger.isEmpty ? 1 : devicesLedger.length;
@@ -67,6 +71,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> wit
         _devicesLedger = devicesLedger;
         _kycQueue = kycQueue;
         _fulfillmentOrders = fulfillmentOrders;
+        _mrrTrend = mrrTrend;
+        _damageReports = damageReports;
         _mrr = mrr;
         _utilization = utilization;
         _activeDefaults = fulfillmentOrders
@@ -210,6 +216,11 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> wit
                     label: const Text('Fulfillment'),
                     onPressed: () => _tabController.animateTo(3),
                   ),
+                  ButtonGroupM3EAction(
+                    icon: const Icon(Icons.report_problem_outlined, size: 18),
+                    label: const Text('Damage'),
+                    onPressed: () => _tabController.animateTo(4),
+                  ),
                 ],
               ),
             ),
@@ -223,6 +234,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> wit
           _buildLedgerTab(textTheme),
           _buildKycQueueTab(textTheme),
           _buildFulfillmentTab(textTheme),
+          _buildDamageReportsTab(textTheme),
         ],
       ),
     );
@@ -230,6 +242,21 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> wit
 
   // TAB 1: Analytics & charts
   Widget _buildAnalyticsTab(TextTheme textTheme) {
+    final chartSpots = <FlSpot>[
+      for (var i = 0; i < _mrrTrend.length; i++)
+        FlSpot(i.toDouble(), (_mrrTrend[i]['mrr'] as num?)?.toDouble() ?? 0),
+    ];
+    if (chartSpots.isEmpty) {
+      chartSpots.addAll([
+        FlSpot(0, _mrr),
+        FlSpot(5, _mrr),
+      ]);
+    }
+
+    final defaultedRentals = _fulfillmentOrders
+        .where((r) => r['status'] == 'defaulted')
+        .toList();
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24.0),
       child: Column(
@@ -269,9 +296,12 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> wit
                       sideTitles: SideTitles(
                         showTitles: true,
                         getTitlesWidget: (val, meta) {
-                          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-                          if (val.toInt() >= 0 && val.toInt() < months.length) {
-                            return Text(months[val.toInt()], style: context.text.labelSmall);
+                          final index = val.toInt();
+                          if (index >= 0 && index < _mrrTrend.length) {
+                            return Text(
+                              _mrrTrend[index]['month_label'] as String? ?? '',
+                              style: context.text.labelSmall,
+                            );
                           }
                           return const Text('');
                         },
@@ -281,14 +311,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> wit
                   borderData: FlBorderData(show: false),
                   lineBarsData: [
                     LineChartBarData(
-                      spots: const [
-                        FlSpot(0, 150000),
-                        FlSpot(1, 180000),
-                        FlSpot(2, 210000),
-                        FlSpot(3, 230000),
-                        FlSpot(4, 260000),
-                        FlSpot(5, 285000),
-                      ],
+                      spots: chartSpots,
                       isCurved: true,
                       color: context.colors.primary,
                       barWidth: 4,
@@ -310,13 +333,22 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> wit
           const SizedBox(height: 12),
           GcCard(
             color: context.colors.errorContainer.withValues(alpha: 0.35),
-            child: Column(
-              children: [
-                _buildDefaultAlertRow('+8801711223344 (MacBook Pro) - Insufficient balance. Sent SMS Warning.', '1 day ago'),
-                Divider(color: context.colors.outlineVariant),
-                _buildDefaultAlertRow('+8801911990088 (Sony Alpha) - Billing collection failed. Attempt 2 scheduled.', '3 hours ago'),
-              ],
-            ),
+            child: defaultedRentals.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(AppSpacing.lg),
+                    child: Text('No active payment defaults.', style: textTheme.bodyMedium),
+                  )
+                : Column(
+                    children: [
+                      for (var i = 0; i < defaultedRentals.length; i++) ...[
+                        if (i > 0) Divider(color: context.colors.outlineVariant),
+                        _buildDefaultAlertRow(
+                          '${defaultedRentals[i]['profiles']?['phone'] ?? 'Unknown'} — ${defaultedRentals[i]['devices']?['name'] ?? 'Device'} defaulted after billing retries.',
+                          'Active',
+                        ),
+                      ],
+                    ],
+                  ),
           ),
         ],
       ),
@@ -460,19 +492,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> wit
                             style: textTheme.labelSmall?.copyWith(color: context.colors.onSurfaceVariant),
                           ),
                           const SizedBox(height: 8),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.network(
-                              review['nid_front_url'],
-                              height: 180,
-                              width: double.infinity,
-                              fit: BoxFit.cover,
-                              errorBuilder: (c, e, s) => Container(
-                                height: 180,
-                                color: context.colors.outlineVariant,
-                                child: const Icon(Icons.broken_image),
-                              ),
-                            ),
+                          _KycSecureImage(
+                            adminRepository: _adminRepository,
+                            storagePath: review['nid_front_url'] as String?,
                           ),
                         ],
                       ),
@@ -487,19 +509,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> wit
                             style: textTheme.labelSmall?.copyWith(color: context.colors.onSurfaceVariant),
                           ),
                           const SizedBox(height: 8),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.network(
-                              review['selfie_url'],
-                              height: 180,
-                              width: double.infinity,
-                              fit: BoxFit.cover,
-                              errorBuilder: (c, e, s) => Container(
-                                height: 180,
-                                color: context.colors.outlineVariant,
-                                child: const Icon(Icons.broken_image),
-                              ),
-                            ),
+                          _KycSecureImage(
+                            adminRepository: _adminRepository,
+                            storagePath: review['selfie_url'] as String?,
                           ),
                         ],
                       ),
@@ -630,6 +642,77 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> wit
     );
   }
 
+  // TAB 5: Damage report review
+  Widget _buildDamageReportsTab(TextTheme textTheme) {
+    final pending = _damageReports.where((r) => r['status'] != 'resolved').toList();
+    if (pending.isEmpty) {
+      return const GcEmptyState(
+        icon: Icons.report_problem_outlined,
+        title: 'No damage reports',
+        message: 'Submitted damage reports will appear here for review.',
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(24),
+      itemCount: pending.length,
+      itemBuilder: (context, index) {
+        final report = pending[index];
+        final rental = report['rentals'];
+        final deviceName = rental?['devices']?['name'] ?? 'Device';
+        final profile = report['profiles'];
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: AppSpacing.lg),
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.xl),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(deviceName, style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  '${profile?['full_name'] ?? 'User'} · ${report['status']}',
+                  style: textTheme.bodySmall,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Text(report['description'] as String? ?? '', style: textTheme.bodyMedium),
+                const SizedBox(height: AppSpacing.lg),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    OutlinedButton(
+                      onPressed: () async {
+                        await _adminRepository.reviewDamageReport(
+                          report['id'] as String,
+                          'reviewing',
+                          notes: 'Under review by admin',
+                        );
+                        await _loadAdminData();
+                      },
+                      child: const Text('Mark reviewing'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: () async {
+                        await _adminRepository.reviewDamageReport(
+                          report['id'] as String,
+                          'resolved',
+                          notes: 'Resolved — Care Plus coverage applied if eligible',
+                        );
+                        await _loadAdminData();
+                      },
+                      child: const Text('Resolve'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildKanbanColumn(String title, List<Map<String, dynamic>> items, TextTheme textTheme, Widget Function(Map<String, dynamic>) actionBuilder) {
     final scheme = context.colors;
     return Container(
@@ -734,6 +817,86 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> wit
           ),
           Text(time, style: TextStyle(fontSize: 12, color: context.colors.onSurfaceVariant)),
         ],
+      ),
+    );
+  }
+}
+
+class _KycSecureImage extends StatefulWidget {
+  const _KycSecureImage({
+    required this.adminRepository,
+    required this.storagePath,
+  });
+
+  final AdminRepository adminRepository;
+  final String? storagePath;
+
+  @override
+  State<_KycSecureImage> createState() => _KycSecureImageState();
+}
+
+class _KycSecureImageState extends State<_KycSecureImage> {
+  String? _signedUrl;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final path = widget.storagePath;
+    if (path == null || path.isEmpty) {
+      setState(() {
+        _loading = false;
+      });
+      return;
+    }
+    final url = await widget.adminRepository.signedKycDocumentUrl(path);
+    if (mounted) {
+      setState(() {
+        _signedUrl = url;
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return Container(
+        height: 180,
+        alignment: Alignment.center,
+        color: context.colors.surfaceContainerHigh,
+        child: const SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
+    if (_signedUrl == null) {
+      return Container(
+        height: 180,
+        color: context.colors.outlineVariant,
+        child: const Icon(Icons.broken_image),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Image.network(
+        _signedUrl!,
+        height: 180,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Container(
+          height: 180,
+          color: context.colors.outlineVariant,
+          child: const Icon(Icons.broken_image),
+        ),
       ),
     );
   }

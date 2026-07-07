@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:m3e_collection/m3e_collection.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/design/adaptive_layout.dart';
 import '../../core/design/app_breakpoints.dart';
 import '../../core/design/app_shapes.dart';
@@ -9,8 +11,11 @@ import '../../core/design/app_spacing.dart';
 import '../../core/theme.dart';
 import '../../core/widgets/gc_components.dart';
 import '../../core/supabase/device_repository.dart';
+import '../../core/supabase/review_repository.dart';
+import '../../core/supabase/wishlist_repository.dart';
 import '../checkout/cart_provider.dart';
 import '../../features/navigation/main_navigation_frame.dart';
+import 'compare_provider.dart';
 
 class DeviceDetailsScreen extends ConsumerStatefulWidget {
   final String deviceId;
@@ -22,12 +27,17 @@ class DeviceDetailsScreen extends ConsumerStatefulWidget {
 
 class _DeviceDetailsScreenState extends ConsumerState<DeviceDetailsScreen> {
   final _deviceRepository = DeviceRepository();
+  final _reviewRepository = ReviewRepository();
+  final _wishlistRepository = WishlistRepository();
   Map<String, dynamic>? _device;
   bool _isLoading = true;
   String? _errorMessage;
   int _selectedTerm = 3;
   String _selectedColor = 'Silver';
   bool _showAllSpecs = false;
+  bool _isWishlisted = false;
+  Map<String, dynamic> _ratingSummary = {'avg_rating': 0, 'review_count': 0};
+  List<Map<String, dynamic>> _reviews = [];
 
   @override
   void initState() {
@@ -43,8 +53,18 @@ class _DeviceDetailsScreenState extends ConsumerState<DeviceDetailsScreen> {
 
     try {
       final device = await _deviceRepository.fetchById(widget.deviceId);
+      final rating = await _reviewRepository.fetchDeviceRating(widget.deviceId);
+      final reviews = await _reviewRepository.fetchDeviceReviews(widget.deviceId);
+      var wishlisted = false;
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        wishlisted = await _wishlistRepository.isWishlisted(user.id, widget.deviceId);
+      }
       setState(() {
         _device = device;
+        _ratingSummary = rating;
+        _reviews = reviews;
+        _isWishlisted = wishlisted;
         _isLoading = false;
       });
     } catch (e) {
@@ -64,6 +84,38 @@ class _DeviceDetailsScreenState extends ConsumerState<DeviceDetailsScreen> {
       case 12: return (_device!['monthly_price_12m'] as num).toDouble();
       default: return (_device!['monthly_price_3m'] as num).toDouble();
     }
+  }
+
+  Future<void> _toggleWishlist() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      if (mounted) context.push('/auth');
+      return;
+    }
+    final deviceId = widget.deviceId;
+    if (_isWishlisted) {
+      await _wishlistRepository.remove(user.id, deviceId);
+    } else {
+      await _wishlistRepository.add(user.id, deviceId);
+    }
+    setState(() => _isWishlisted = !_isWishlisted);
+  }
+
+  void _toggleCompare() {
+    if (_device == null) return;
+    ref.read(compareProvider.notifier).toggle(_device!);
+    final count = ref.read(compareProvider).length;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Compare list: $count/${CompareNotifier.maxDevices} devices')),
+    );
+  }
+
+  void _shareDevice() {
+    final link = 'gadgetchai://device/${widget.deviceId}';
+    Clipboard.setData(ClipboardData(text: link));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Device link copied to clipboard')),
+    );
   }
 
   void _addToCart() {
@@ -133,8 +185,17 @@ class _DeviceDetailsScreenState extends ConsumerState<DeviceDetailsScreen> {
           style: context.text.titleMedium,
         ),
         actions: [
-          IconButton(icon: const Icon(Icons.share_outlined), onPressed: () {}),
-          IconButton(icon: const Icon(Icons.favorite_border_rounded), onPressed: () {}),
+          IconButton(
+            icon: const Icon(Icons.compare_arrows_rounded),
+            tooltip: 'Add to compare',
+            onPressed: _toggleCompare,
+          ),
+          IconButton(icon: const Icon(Icons.share_outlined), onPressed: _shareDevice),
+          IconButton(
+            icon: Icon(_isWishlisted ? Icons.favorite_rounded : Icons.favorite_border_rounded),
+            color: _isWishlisted ? context.colors.primary : null,
+            onPressed: _toggleWishlist,
+          ),
         ],
       ),
       body: Stack(
@@ -192,6 +253,8 @@ class _DeviceDetailsScreenState extends ConsumerState<DeviceDetailsScreen> {
                           _buildSpecificationsCard(textTheme),
                           const SizedBox(height: AppSpacing.lg),
                           _buildInsideBoxCard(textTheme),
+                          const SizedBox(height: AppSpacing.lg),
+                          _buildReviewsSection(textTheme),
                           const SizedBox(height: AppSpacing.xl),
                         ],
                       ),
@@ -294,6 +357,19 @@ class _DeviceDetailsScreenState extends ConsumerState<DeviceDetailsScreen> {
           _device!['name'],
           style: context.text.headlineMedium?.copyWith(fontWeight: FontWeight.w800),
         ),
+        if ((_ratingSummary['review_count'] as int? ?? 0) > 0) ...[
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.star_rounded, color: context.colors.tertiary, size: 20),
+              const SizedBox(width: 4),
+              Text(
+                '${_ratingSummary['avg_rating']} (${_ratingSummary['review_count']} reviews)',
+                style: context.text.labelLarge,
+              ),
+            ],
+          ),
+        ],
         const SizedBox(height: 12),
         Text(
           _device!['description'] ?? 'No description details listed.',
@@ -478,6 +554,56 @@ class _DeviceDetailsScreenState extends ConsumerState<DeviceDetailsScreen> {
         const SizedBox(width: 12),
         Text(label, style: context.text.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
       ],
+    );
+  }
+
+  Widget _buildReviewsSection(TextTheme textTheme) {
+    if (_reviews.isEmpty) {
+      return GcCard(
+        child: Text(
+          'No renter reviews yet. Be the first after your rental!',
+          style: context.text.bodyMedium,
+        ),
+      );
+    }
+
+    return GcCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Renter reviews', style: context.text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+          const SizedBox(height: AppSpacing.md),
+          ..._reviews.map((review) {
+            final name = review['profiles']?['full_name'] as String? ?? 'Renter';
+            return Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      ...List.generate(5, (i) => Icon(
+                            i < (review['rating'] as int? ?? 0)
+                                ? Icons.star_rounded
+                                : Icons.star_border_rounded,
+                            size: 16,
+                            color: context.colors.tertiary,
+                          )),
+                      const SizedBox(width: 8),
+                      Text(name, style: context.text.labelMedium),
+                    ],
+                  ),
+                  if (review['review_text'] != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(review['review_text'] as String, style: context.text.bodySmall),
+                    ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
     );
   }
 }
